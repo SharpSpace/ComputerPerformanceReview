@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet --version:*)",
+      "Bash(dotnet --list-sdks:*)",
+      "Bash(dotnet nuget list:*)",
+      "Bash(dotnet add package:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dir:*)",
+      "mcp__MCP_DOCKER__list_directory",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command:*)",
+      "mcp__MCP_DOCKER__directory_tree",
+      "Bash(Remove-Item -Recurse -Force \"C:\\\\Code\\\\ComputerPerformanceReview\\\\bin\", \"C:\\\\Code\\\\ComputerPerformanceReview\\\\obj\")",
+      "Bash(Write-Host \"Done\")",
+      "Bash(find:*)"
+    ]
+  }
+}
