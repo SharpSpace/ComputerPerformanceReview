@@ -9,7 +9,35 @@ public static class LogHelper
 
     public static string GetLogDir()
     {
-        return Path.Combine(@"C:\Code\ComputerPerformanceReview", LogFolder);
+        // Get the directory where the executable is located
+        var exeDir = AppContext.BaseDirectory;
+        
+        // Check if we're running from a bin folder (development environment)
+        // In development: C:\...\bin\Debug\net10.0-windows\
+        // In production: C:\...\MyApp\ (no bin folder in path)
+        var dirInfo = new DirectoryInfo(exeDir);
+        
+        // Walk up the directory tree to check if there's a bin folder in the path
+        var current = dirInfo;
+        DirectoryInfo? binFolder = null;
+        
+        while (current != null)
+        {
+            if (current.Name.Equals("bin", StringComparison.OrdinalIgnoreCase))
+            {
+                binFolder = current;
+                break;
+            }
+            current = current.Parent;
+        }
+        
+        // If we found a bin folder in the path, use the parent of the bin folder
+        if (binFolder?.Parent != null)
+        {
+            exeDir = binFolder.Parent.FullName;
+        }
+        
+        return Path.Combine(exeDir, LogFolder);
     }
 
     public static string GetLogFilePath(DateTime timestamp)
