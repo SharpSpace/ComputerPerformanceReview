@@ -198,7 +198,8 @@ static async Task RunSnapshotMode()
         new MemoryAnalyzer(),
         new CpuAnalyzer(),
         new NetworkAnalyzer(),
-        new GpuAnalyzer()
+        new GpuAnalyzer(),
+        new DriverAnalyzer()
     };
 
     var reports = new List<AnalysisReport>();
