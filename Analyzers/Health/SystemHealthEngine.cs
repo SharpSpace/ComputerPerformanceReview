@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 
 namespace ComputerPerformanceReview.Analyzers.Health;
@@ -101,12 +102,33 @@ public sealed class SystemHealthEngine
                 var procInfo = sampleWithScores.TopCpuProcesses
                     .Concat(sampleWithScores.TopMemoryProcesses)
                     .FirstOrDefault(p => p.Name.Equals(firstHang.Name, StringComparison.OrdinalIgnoreCase));
-                
-                if (procInfo != null)
+                var procId = procInfo?.Pid;
+
+                if (procId is null)
+                {
+                    Process[] processes = [];
+                    try
+                    {
+                        processes = Process.GetProcessesByName(firstHang.Name);
+                        var match = processes.FirstOrDefault();
+                        if (match is not null)
+                            procId = match.Id;
+                    }
+                    catch
+                    {
+                    }
+                    finally
+                    {
+                        foreach (var process in processes)
+                            process.Dispose();
+                    }
+                }
+
+                if (procId is not null)
                 {
                     deepFreezeReport = FreezeInvestigator.Investigate(
                         firstHang.Name, 
-                        procInfo.Pid, 
+                        procId.Value, 
                         TimeSpan.FromSeconds(firstHang.HangSeconds), 
                         sampleWithScores);
                     builder.DeepFreezeReport = deepFreezeReport;

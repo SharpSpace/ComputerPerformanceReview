@@ -9,6 +9,7 @@ namespace ComputerPerformanceReview.Helpers;
 /// </summary>
 public static class MiniDumpHelper
 {
+    private const int MaxDumpFiles = 10;
     // MiniDump type flags
     [Flags]
     private enum MINIDUMP_TYPE : uint
@@ -78,6 +79,7 @@ public static class MiniDumpHelper
 
             if (success)
             {
+                PruneOldDumps(dumpsDir);
                 return filePath;
             }
             else
@@ -91,6 +93,34 @@ public static class MiniDumpHelper
         {
             Console.WriteLine($"Failed to create minidump: {ex.Message}");
             return null;
+        }
+    }
+
+    private static void PruneOldDumps(string dumpsDir)
+    {
+        try
+        {
+            var dumpFiles = Directory.GetFiles(dumpsDir, "*.dmp")
+                .Select(path => new FileInfo(path))
+                .OrderByDescending(info => info.CreationTimeUtc)
+                .ToList();
+
+            if (dumpFiles.Count <= MaxDumpFiles)
+                return;
+
+            foreach (var file in dumpFiles.Skip(MaxDumpFiles))
+            {
+                try
+                {
+                    file.Delete();
+                }
+                catch
+                {
+                }
+            }
+        }
+        catch
+        {
         }
     }
 

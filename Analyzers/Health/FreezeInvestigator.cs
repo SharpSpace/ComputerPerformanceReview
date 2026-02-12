@@ -1,73 +1,88 @@
+using System.Diagnostics;
+using ProcessThread = System.Diagnostics.ProcessThread;
+
 namespace ComputerPerformanceReview.Analyzers.Health;
 
-/// <summary>
-/// Deep freeze diagnostic engine that collects detailed thread information 
-/// when a process becomes unresponsive (freeze > 5 seconds).
-/// Performance constraint: Analysis must complete within 200ms.
-/// </summary>
+public enum DeepFreezeCategory
+{
+    SuspendedProcess,
+    DriverStall,
+    ExternalDependencyStall,
+    LockContention,
+    Deadlock,
+    PagingPressure,
+    MemoryPressure,
+    SchedulerThrash,
+    ThreadPoolStarvation,
+    Unknown
+}
+
+public sealed record DeepFreezeDiagnostic(
+    DeepFreezeCategory Category,
+    string Description,
+    double ConfidenceScore
+);
+
 public static class FreezeInvestigator
 {
-    private const double DominantWaitReasonThreshold = 0.6; // 60%
+    private const double DominantThreshold = 0.6;
     private const int MinidumpThresholdSeconds = 15;
 
-    /// <summary>
-    /// Investigates a frozen process and returns a detailed freeze report.
-    /// Collects thread states, wait reasons, and performs root cause analysis.
-    /// </summary>
-    /// <param name="processName">Name of the frozen process</param>
-    /// <param name="processId">Process ID</param>
-    /// <param name="freezeDuration">How long the process has been frozen</param>
-    /// <param name="sample">Current system monitoring sample</param>
-    /// <returns>Detailed freeze report with root cause analysis</returns>
-    public static FreezeReport? Investigate(string processName, int processId, TimeSpan freezeDuration, MonitorSample sample)
+    public static FreezeReport? Investigate(
+        string processName,
+        int processId,
+        TimeSpan freezeDuration,
+        MonitorSample sample)
     {
         try
         {
-            var process = Process.GetProcessById(processId);
-            
-            // Collect thread information
+            using var process = Process.GetProcessById(processId);
+
             var threads = process.Threads.Cast<ProcessThread>().ToList();
+
             int totalThreads = threads.Count;
             int runningThreads = 0;
-            var waitReasonCounts = new Dictionary<string, int>();
+            int suspendedThreads = 0;
+
+            var waitReasonCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var thread in threads)
             {
                 try
                 {
-                    var state = thread.ThreadState;
-                    
-                    if (state == System.Diagnostics.ThreadState.Running)
+                    switch (thread.ThreadState)
                     {
-                        runningThreads++;
-                    }
-                    else if (state == System.Diagnostics.ThreadState.Wait)
-                    {
-                        // Get wait reason
-                        string waitReason = thread.WaitReason.ToString();
-                        
-                        if (!waitReasonCounts.ContainsKey(waitReason))
-                            waitReasonCounts[waitReason] = 0;
-                        
-                        waitReasonCounts[waitReason]++;
+                        case System.Diagnostics.ThreadState.Running:
+                            runningThreads++;
+                            break;
+
+                        case System.Diagnostics.ThreadState.Wait:
+                            var reason = thread.WaitReason.ToString();
+
+                            if (thread.WaitReason == ThreadWaitReason.Suspended)
+                            {
+                                suspendedThreads++;
+                            }
+
+                            waitReasonCounts.TryAdd(reason, 0);
+                            waitReasonCounts[reason]++;
+                            break;
                     }
                 }
                 catch
                 {
-                    // Skip threads we can't access
+                    // ignore inaccessible threads
                 }
             }
 
-            // Determine dominant wait reason (>60% of waiting threads)
             int waitingThreads = totalThreads - runningThreads;
+
             string? dominantWaitReason = null;
-            
             if (waitingThreads > 0)
             {
                 foreach (var kvp in waitReasonCounts)
                 {
-                    double percentage = (double)kvp.Value / waitingThreads;
-                    if (percentage > DominantWaitReasonThreshold)
+                    if ((double)kvp.Value / waitingThreads >= DominantThreshold)
                     {
                         dominantWaitReason = kvp.Key;
                         break;
@@ -75,27 +90,25 @@ public static class FreezeInvestigator
                 }
             }
 
-            // Analyze root cause
-            string rootCause = AnalyzeRootCause(
-                dominantWaitReason, 
-                waitReasonCounts, 
-                runningThreads, 
-                totalThreads, 
-                sample, 
-                process);
+            string? dumpPath = null;
+            MiniDumpAnalysis? dumpAnalysis = null;
 
-            // Create minidump if freeze duration > 15 seconds
-            string? miniDumpPath = null;
-            MiniDumpAnalysis? miniDumpAnalysis = null;
-            
-            if (freezeDuration.TotalSeconds > MinidumpThresholdSeconds)
+            if (freezeDuration.TotalSeconds >= MinidumpThresholdSeconds)
             {
-                miniDumpPath = MiniDumpHelper.CreateMiniDump(process);
-                if (miniDumpPath != null)
-                {
-                    miniDumpAnalysis = MiniDumpHelper.AnalyzeMiniDump(miniDumpPath);
-                }
+                dumpPath = MiniDumpHelper.CreateMiniDump(process);
+                if (dumpPath != null)
+                    dumpAnalysis = MiniDumpHelper.AnalyzeMiniDump(dumpPath);
             }
+
+            var diagnostic = AnalyzeRootCause(
+                dominantWaitReason,
+                waitReasonCounts,
+                runningThreads,
+                suspendedThreads,
+                totalThreads,
+                sample,
+                process,
+                dumpAnalysis);
 
             return new FreezeReport(
                 ProcessName: processName,
@@ -105,109 +118,180 @@ public static class FreezeInvestigator
                 RunningThreads: runningThreads,
                 WaitReasonCounts: waitReasonCounts,
                 DominantWaitReason: dominantWaitReason,
-                LikelyRootCause: rootCause,
-                MiniDumpPath: miniDumpPath,
-                MiniDumpAnalysis: miniDumpAnalysis
+                LikelyRootCause: diagnostic.Description,
+                MiniDumpPath: dumpPath,
+                MiniDumpAnalysis: dumpAnalysis
             );
         }
-        catch (Exception ex)
+        catch
         {
-            // If we can't investigate, return null
-            Console.WriteLine($"Failed to investigate freeze for {processName}: {ex.Message}");
             return null;
         }
     }
 
-    /// <summary>
-    /// Applies heuristics to determine likely root cause of freeze.
-    /// </summary>
-    private static string AnalyzeRootCause(
+    private static DeepFreezeDiagnostic AnalyzeRootCause(
         string? dominantWaitReason,
         Dictionary<string, int> waitReasonCounts,
         int runningThreads,
+        int suspendedThreads,
         int totalThreads,
         MonitorSample sample,
-        Process process)
+        Process process,
+        MiniDumpAnalysis? dump)
     {
-        int waitingThreads = totalThreads - runningThreads;
-        
-        // Get process CPU usage
         double processCpu = GetProcessCpuPercent(process, sample);
+        int waitingThreads = totalThreads - runningThreads;
 
-        // Heuristic 1: Most threads waiting on Executive (>60%)
-        if (dominantWaitReason == "Executive")
+        // 1️⃣ All suspended
+        if (suspendedThreads == totalThreads && totalThreads > 0)
         {
-            return "Lock contention or synchronization block";
+            return new(
+                DeepFreezeCategory.SuspendedProcess,
+                "All threads suspended – likely OS lifecycle pause or debugger intervention.",
+                0.95
+            );
         }
 
-        // Heuristic 2: PageIn wait reason
-        if (waitReasonCounts.ContainsKey("PageIn") && waitReasonCounts["PageIn"] > 0)
+        // 2️⃣ Driver stall via dump analysis
+        if (dump != null)
         {
-            return "Memory or disk paging pressure";
+            // Check faulting module
+            if (!string.IsNullOrWhiteSpace(dump.FaultingModule) &&
+                IsDriverModule(dump.FaultingModule))
+            {
+                return new(
+                    DeepFreezeCategory.DriverStall,
+                    $"Faulting module is driver-related ({dump.FaultingModule}).",
+                    0.9
+                );
+            }
+
+            // Check flagged modules
+            if (dump.FlaggedModules.Any(IsDriverModule))
+            {
+                var module = dump.FlaggedModules.First(IsDriverModule);
+                return new(
+                    DeepFreezeCategory.DriverStall,
+                    $"Driver module flagged in dump ({module}).",
+                    0.9
+                );
+            }
+
+            // Scan stack traces for driver modules
+            if (dump.StackTraces.Any(s => ContainsDriverModule(s)))
+            {
+                return new(
+                    DeepFreezeCategory.DriverStall,
+                    "Stack trace contains GPU/driver modules.",
+                    0.85
+                );
+            }
         }
 
-        // Heuristic 3: All threads waiting + low CPU
-        if (runningThreads == 0 && processCpu < 20)
+        // 3️⃣ Lock contention
+        if (dominantWaitReason == "Executive" && runningThreads > 0)
         {
-            return "Deadlock or kernel object wait";
+            return new(
+                DeepFreezeCategory.LockContention,
+                "Majority waiting on Executive → synchronization contention.",
+                0.75
+            );
         }
 
-        // Heuristic 4: High context switches + low CPU
-        if (sample.ContextSwitchesPerSec > 30000 && sample.CpuPercent < 30)
+        // 4️⃣ Deadlock
+        if (dominantWaitReason == "Executive" &&
+            runningThreads == 0 &&
+            processCpu < 20)
         {
-            return "Scheduler thrashing";
+            return new(
+                DeepFreezeCategory.Deadlock,
+                "No running threads + Executive waits dominate → probable deadlock.",
+                0.8
+            );
         }
 
-        // Heuristic 5: High DPC time
-        if (sample.DpcTimePercent > 15)
+        // 5️⃣ Paging pressure
+        if (waitReasonCounts.ContainsKey("PageIn") ||
+            sample.PagesInputPerSec > 2000)
         {
-            return "Driver or interrupt latency issue";
+            return new(
+                DeepFreezeCategory.PagingPressure,
+                "Hard paging detected – memory stall.",
+                0.8
+            );
         }
 
-        // Heuristic 6: Most threads waiting on UserRequest
-        if (dominantWaitReason == "UserRequest")
+        // 6️⃣ Scheduler thrash
+        if (sample.ContextSwitchesPerSec > 80000 &&
+            sample.CpuPercent < 30)
         {
-            return "Waiting for user input or I/O completion";
+            return new(
+                DeepFreezeCategory.SchedulerThrash,
+                "Extremely high context switching with low CPU.",
+                0.7
+            );
         }
 
-        // Heuristic 7: FreePage wait reason
-        if (waitReasonCounts.ContainsKey("FreePage") && waitReasonCounts["FreePage"] > 0)
+        // 7️⃣ Memory pressure
+        if (waitReasonCounts.ContainsKey("FreePage") ||
+            sample.MemoryPressureIndex > 80)
         {
-            return "Memory allocation pressure";
+            return new(
+                DeepFreezeCategory.MemoryPressure,
+                "High memory pressure detected.",
+                0.7
+            );
         }
 
-        // Heuristic 8: VirtualMemory wait reason
-        if (waitReasonCounts.ContainsKey("VirtualMemory") && waitReasonCounts["VirtualMemory"] > 0)
+        // 8️⃣ External dependency
+        if (dominantWaitReason == "UserRequest" && runningThreads == 0)
         {
-            return "Virtual memory management delay";
+            return new(
+                DeepFreezeCategory.ExternalDependencyStall,
+                "Likely waiting on RPC/COM/I/O dependency.",
+                0.65
+            );
         }
 
-        // Heuristic 9: High number of threads with low activity
+        // 9️⃣ Thread starvation
         if (totalThreads > 100 && runningThreads < 2)
         {
-            return "Thread pool starvation or async deadlock";
+            return new(
+                DeepFreezeCategory.ThreadPoolStarvation,
+                "High thread count with minimal execution.",
+                0.6
+            );
         }
 
-        // Default: mixed or unclear pattern
-        if (waitingThreads > runningThreads * 2)
-        {
-            return "Mixed wait states - likely internal synchronization issue";
-        }
-
-        return "Undetermined - requires deeper investigation";
+        return new(
+            DeepFreezeCategory.Unknown,
+            "Cause undetermined – deeper stack analysis required.",
+            0.3
+        );
     }
 
-    /// <summary>
-    /// Gets the CPU percentage for a specific process from the monitoring sample.
-    /// </summary>
+    private static bool IsDriverModule(string module)
+    {
+        var m = module.ToLowerInvariant();
+
+        return m.Contains("nvwgf2umx") ||
+               m.Contains("dxgi") ||
+               m.Contains("d3d") ||
+               m.Contains("win32k") ||
+               m.Contains("wlanapi") ||
+               m.Contains("bluetooth") ||
+               m.Contains("rpcrt4") ||
+               m.Contains("twinapi");
+    }
+
+    private static bool ContainsDriverModule(string stack)
+    {
+        return IsDriverModule(stack);
+    }
+
     private static double GetProcessCpuPercent(Process process, MonitorSample sample)
     {
-        // Look in TopCpuProcesses
-        var procInfo = sample.TopCpuProcesses.FirstOrDefault(p => p.Pid == process.Id);
-        if (procInfo != null)
-            return procInfo.CpuPercent;
-
-        // If not found, assume low CPU
-        return 0;
+        var info = sample.TopCpuProcesses.FirstOrDefault(p => p.Pid == process.Id);
+        return info?.CpuPercent ?? 0;
     }
 }

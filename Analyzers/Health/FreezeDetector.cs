@@ -27,9 +27,7 @@ public static class FreezeDetector
                 processName,
                 "Lagringsfel",
                 $"Systemloggen visar {sample.StorageErrorsLast15Min} lagringsfel senaste 15 min. "
-                + "Controller/disk-timeouts kan orsaka hängningar även om diskkön ser normal ut. "
-                + "ÅTGÄRDER: Kontrollera diskens SMART-status med CrystalDiskInfo. "
-                + "Uppdatera lagringsdrivrutinen. Om det upprepas: byt disk.",
+                + "ÅTGÄRDER: Kontrollera SMART-status och uppdatera lagringsdrivrutiner.",
                 evidence);
         }
 
@@ -58,9 +56,7 @@ public static class FreezeDetector
                 processName,
                 "Diskbunden",
                 $"Diskens svarstid är {diskLatencyMs:F0}ms (kö: {sample.DiskQueueLength:F1}). "
-                + "Processen väntar troligen på disk-I/O. "
-                + "Om SSD: kontrollera TRIM och firmware. Om HDD: överväg SSD-uppgradering. "
-                + "Kontrollera vilka processer som belastar disken i Aktivitetshanteraren.",
+                + "Processen väntar troligen på disk-I/O.",
                 evidence);
         }
 
@@ -82,10 +78,10 @@ public static class FreezeDetector
             return new FreezeClassification(
                 processName,
                 "GPU-mättnad",
-                $"GPU ligger på {sample.GpuUtilizationPercent:F0}%. UI-rendering kan blockeras av grafikbelastning. "
+                $"GPU ligger på {sample.GpuUtilizationPercent:F0}%. UI-rendering kan blockeras. "
                 + (sample.TdrEventsLast15Min > 0
-                    ? "GPU-drivrutinen har återställts — uppdatera/rulla tillbaka drivrutinen. "
-                    : "Sänk grafikbelastningen: stäng spel/3D-appar, minska upplösning, uppdatera GPU-drivrutin. "),
+                    ? "ÅTGÄRD: Uppdatera eller rulla tillbaka GPU-drivrutinen. "
+                    : "ÅTGÄRD: Sänk grafikbelastningen och uppdatera GPU-drivrutinen. "),
                 evidence);
         }
 
@@ -101,10 +97,8 @@ public static class FreezeDetector
             return new FreezeClassification(
                 processName,
                 "Drivrutinsproblem",
-                $"DPC-tid: {sample.DpcTimePercent:F1}%. En drivrutin blockerar processorn med långa DPC-anrop. "
-                + "DPC (Deferred Procedure Calls) körs med hög prioritet och blockerar normal programkörning. "
-                + "ÅTGÄRDER: Uppdatera GPU-, nätverks- och USB-drivrutiner. "
-                + "Kör 'LatencyMon' (gratis) för att identifiera exakt vilken drivrutin.",
+                $"DPC-tid: {sample.DpcTimePercent:F1}%. En drivrutin blockerar processorn. "
+                + "ÅTGÄRDER: Uppdatera GPU-, nätverks- och USB-drivrutiner.",
                 evidence);
         }
 
@@ -121,9 +115,7 @@ public static class FreezeDetector
                 processName,
                 "Nätverkslatens",
                 $"DNS-latens är {sample.DnsLatencyMs:F0}ms. Processen kan vänta på nätverkssvar. "
-                + "Program som gör HTTP-anrop på UI-tråden fryser tills svaret kommer. "
-                + "ÅTGÄRDER: Kontrollera nätverket, testa byta DNS-server (8.8.8.8 / 1.1.1.1). "
-                + "Om VPN: prova koppla från.",
+                + "ÅTGÄRD: Kontrollera nätverket eller byt DNS-server.",
                 evidence);
         }
 
@@ -151,8 +143,7 @@ public static class FreezeDetector
             return new FreezeClassification(
                 processName,
                 "CPU-mättnad",
-                $"CPU ligger på {sample.CpuPercent:F0}% — alla kärnor är hårt belastade. "
-                + "Processen kan inte få CPU-tid. Stäng tunga program eller vänta tills lasten minskar.",
+                $"CPU ligger på {sample.CpuPercent:F0}%. Processen får lite CPU-tid.",
                 evidence);
         }
 
@@ -171,9 +162,8 @@ public static class FreezeDetector
             return new FreezeClassification(
                 processName,
                 "Minnestryck",
-                $"Minnestrycksindex: {sample.MemoryPressureIndex}/100. "
-                + "Systemet tvingas använda sidfilen intensivt — varje minnesåtkomst kan kräva diskläsning. "
-                + "Stäng program/flikar för att frigöra RAM, eller uppgradera minnet.",
+                $"Minnestrycksindex: {sample.MemoryPressureIndex}/100. Systemet paging-ar mycket. "
+                + "ÅTGÄRD: Stäng program/flikar eller öka RAM.",
                 evidence);
         }
 
@@ -238,11 +228,7 @@ public static class FreezeDetector
                 processName,
                 "Tråd-pool starvation",
                 $"{processName} har {threadCount} trådar men nästan ingen CPU-användning ({procCpuPct:F0}%). "
-                + "Alla trådar verkar vänta — trolig thread pool starvation. "
-                + "Det innebär att inget arbete kan schemaläggas trots att systemet är ledigt. "
-                + "ÅTGÄRDER: Starta om programmet. Om det upprepas: det är en bugg i programmet (async deadlock, "
-                + "synkrona I/O-anrop som blockerar trådpoolen, eller Task.Result/GetAwaiter().GetResult() deadlock). "
-                + "Om du är utvecklare: undvik .Result och .Wait() i async-kod.",
+                + "Trolig thread pool starvation. ÅTGÄRD: Starta om programmet.",
                 evidence);
         }
 
@@ -261,12 +247,8 @@ public static class FreezeDetector
                 return new FreezeClassification(
                     processName,
                     "Nätverksväntan (blockerad UI-tråd)",
-                    $"{processName} gör I/O-operationer med låg CPU ({procCpuPct:F0}%) "
-                    + $"och nätverket är aktivt ({sample.NetworkMbps:F1} Mbps, DNS {sample.DnsLatencyMs:F0}ms). "
-                    + "Processen gör troligen ett synkront nätverksanrop på UI-tråden (HTTP, DNS, WebSocket, etc). "
-                    + "ÅTGÄRDER: Vänta — det kan lösa sig när svaret kommer. "
-                    + "Om VPN: försök koppla från. Kontrollera brandväggen/proxy. "
-                    + "Om det upprepas: det är en bugg — nätverksanrop ska vara asynkrona.",
+                    $"{processName} gör I/O med låg CPU ({procCpuPct:F0}%) och nätverket är aktivt. "
+                    + "Trolig synkron nätverksväntan på UI-tråden.",
                     evidence);
             }
         }
@@ -280,11 +262,7 @@ public static class FreezeDetector
                 processName,
                 "Resurssvält (handles)",
                 $"{processName} har {handleCount} handles men använder knappt CPU ({procCpuPct:F0}%). "
-                + "Programmet väntar troligen på en Windows-resurs (named pipe, named mutex, event, semaphore). "
-                + "Det kan vara en inter-process-kommunikation som fastnat, "
-                + "t.ex. väntar på svar från en annan process eller tjänst. "
-                + "ÅTGÄRDER: Kontrollera om andra program/tjänster som {processName} kommunicerar med fungerar. "
-                + "Starta om programmet. Kör 'Process Explorer' (Sysinternals) för att se vilka handles som är öppna.",
+                + "Trolig resurssvält. ÅTGÄRD: Starta om programmet.",
                 evidence);
         }
 
@@ -297,12 +275,8 @@ public static class FreezeDetector
             return new FreezeClassification(
                 processName,
                 "Lås-konkurrens (contention)",
-                $"Systemet har {sample.ContextSwitchesPerSec:F0} context switches/s men CPU är bara {sample.CpuPercent:F0}%. "
-                + "Processer byter snabbt men gör inget nyttigt arbete — de väntar på lås som någon annan håller. "
-                + $"{processName} kan vara del av denna lås-kedja. "
-                + "ÅTGÄRDER: Identifiera vilka processer som körs parallellt och kan störa. "
-                + "Starta om {processName}. Om det upprepas: det kan vara deadlock eller priority inversion — "
-                + "kör 'WinDbg' eller 'Process Monitor' för djupare analys.",
+                $"Systemet har {sample.ContextSwitchesPerSec:F0} context switches/s men CPU är {sample.CpuPercent:F0}%. "
+                + $"Trolig lås-konkurrens som påverkar {processName}.",
                 evidence);
         }
 
@@ -315,10 +289,7 @@ public static class FreezeDetector
                 processName,
                 "Paging-väntan",
                 $"{processName} genererar {procFaults.PageFaultsPerSec:F0} page faults/s med låg CPU ({procCpuPct:F0}%). "
-                + "Programmets minne har delvis laddats ut till sidfilen. Varje åtkomst väntar på disk. "
-                + "Trots att systemnivå-disken ser OK ut, kan enskilda operationer vara långsamma. "
-                + "ÅTGÄRDER: Stäng andra tunga program för att frigöra RAM. "
-                + "Om programmet alltid använder mycket minne: överväg mer RAM.",
+                + "Trolig paging-väntan.",
                 evidence);
         }
 
@@ -331,11 +302,8 @@ public static class FreezeDetector
             return new FreezeClassification(
                 processName,
                 "Drivrutinslatens (förhöjd DPC)",
-                $"DPC-tid ligger på {sample.DpcTimePercent:F1}% — inte kritiskt men förhöjt. "
-                + $"DPC-anrop prioriteras före {processName} och kan orsaka mikrostutter och UI-häng. "
-                + "ÅTGÄRDER: Uppdatera nätverkskorts-, GPU- och USB-drivrutiner. "
-                + "Koppla bort USB-enheter en i taget för att identifiera källan. "
-                + "Kör 'LatencyMon' för exakt drivrutinsidentifikation.",
+                $"DPC-tid ligger på {sample.DpcTimePercent:F1}% — förhöjt men under varningsnivå. "
+                + $"DPC kan stjäla CPU-tid från {processName}.",
                 evidence);
         }
 
@@ -349,10 +317,8 @@ public static class FreezeDetector
             return new FreezeClassification(
                 processName,
                 "Scheduler-trängsel",
-                $"Processorkön är {sample.ProcessorQueueLength} med {cores} kärnor och bara {sample.CpuPercent:F0}% total CPU. "
-                + $"{processName} kan inte schemaläggas trots att det finns ledig kapacitet — möjligen pga priority inversion. "
-                + "ÅTGÄRDER: Kontrollera om realtidsprocesser körs (ljud, video). "
-                + "Starta om {processName} och tunga bakgrundsprocesser.",
+                $"Processorkön är {sample.ProcessorQueueLength} med {cores} kärnor och {sample.CpuPercent:F0}% total CPU. "
+                + $"Trolig scheduler-trängsel som påverkar {processName}.",
                 evidence);
         }
 
@@ -367,10 +333,7 @@ public static class FreezeDetector
             evidence.Add($"⚠ {processName} använder {procCpuPct:F0}% CPU men svarar ändå inte → UI-tråd blockerad av beräkning");
             subCause = "UI-tråd blockerad av beräkning";
             subDescription = $"{processName} använder {procCpuPct:F0}% CPU men UI:t svarar inte. "
-                + "En tung beräkning körs troligen direkt på UI-tråden istället för i bakgrunden. "
-                + "ÅTGÄRDER: Vänta — beräkningen kan slutföras. "
-                + "Om det tar > 30 sek: starta om programmet. "
-                + "Om du är utvecklare: flytta tunga beräkningar till Task.Run/bakgrundstråd.";
+                + "Trolig tung beräkning på UI-tråden.";
         }
         else
         {
@@ -379,15 +342,7 @@ public static class FreezeDetector
             subCause = "Intern blockering (deadlock/väntan)";
             subDescription = $"{processName} använder knappt CPU ({procCpuPct:F0}%) och systemet ser friskt ut "
                 + $"(CPU {sample.CpuPercent:F0}%, disklatens {Math.Max(sample.AvgDiskSecRead, sample.AvgDiskSecWrite) * 1000:F0}ms). "
-                + "Processen väntar troligen på: "
-                + "• Intern deadlock (två trådar väntar på varandras lås) "
-                + "• Extern process/tjänst (COM-anrop, RPC, WMI, Named Pipes) "
-                + "• Windows-shell-integration (shell extension som hänger) "
-                + "• Antivirus/säkerhetsprogram som blockerar en operation. "
-                + "ÅTGÄRDER: 1) Vänta 30 sek. 2) Om det inte löser sig: "
-                + "Aktivitetshanteraren → Avsluta aktivitet. "
-                + "3) Kontrollera antivirusloggar. 4) Prova inaktivera shell extensions med ShellExView (NirSoft). "
-                + "5) Om det upprepas regelbundet: rapportera buggen till utvecklaren.";
+                + "Trolig intern blockering (deadlock/väntan).";
         }
 
         return new FreezeClassification(processName, subCause, subDescription, evidence);
@@ -411,14 +366,8 @@ public static class FreezeDetector
             processName,
             "Okänd",
             $"Kunde inte fastställa en tydlig orsak till att {processName} hänger. "
-            + $"Systemets tillstånd: CPU {sample.CpuPercent:F0}%, disk {sample.DiskQueueLength:F1} kö, "
-            + $"DPC {sample.DpcTimePercent:F1}%, minnestryck {sample.MemoryPressureIndex}/100. "
-            + "Möjliga förklaringar: "
-            + "• Nätverksbaserad väntan (server svarar inte) "
-            + "• GPU-drivrutin (DWM-blockering) "
-            + "• Internt programfel "
-            + "ÅTGÄRDER: Vänta 30 sek, sedan starta om programmet. "
-            + "Kontrollera nätverksanslutningen och uppdatera drivrutiner.",
+            + $"System: CPU {sample.CpuPercent:F0}%, disk-kö {sample.DiskQueueLength:F1}, "
+            + $"DPC {sample.DpcTimePercent:F1}%, minnestryck {sample.MemoryPressureIndex}/100.",
             evidence);
     }
 
