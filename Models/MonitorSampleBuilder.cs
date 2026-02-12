@@ -1,12 +1,7 @@
 namespace ComputerPerformanceReview.Models;
 
-/// <summary>
-/// Mutabel builder för MonitorSample. Sub-analyzers populerar sina fält,
-/// sedan anropas Build() för att skapa det immutabla recordet.
-/// </summary>
 public sealed class MonitorSampleBuilder
 {
-    // Grundläggande
     public DateTime Timestamp { get; set; } = DateTime.Now;
     public double CpuPercent { get; set; }
     public double MemoryUsedPercent { get; set; }
@@ -19,9 +14,11 @@ public sealed class MonitorSampleBuilder
     public List<MonitorProcessInfo> TopCpuProcesses { get; set; } = [];
     public List<MonitorProcessInfo> TopMemoryProcesses { get; set; } = [];
     public List<MonitorProcessInfo> TopGdiProcesses { get; set; } = [];
+    public List<MonitorIoProcessInfo> TopIoProcesses { get; set; } = [];
+    public List<MonitorFaultProcessInfo> TopFaultProcesses { get; set; } = [];
+    public List<DiskInstanceStat> DiskInstances { get; set; } = [];
     public List<HangingProcessInfo> HangingProcesses { get; set; } = [];
 
-    // Nya minnesfält
     public double PagesInputPerSec { get; set; }
     public double PagesOutputPerSec { get; set; }
     public long CommitLimit { get; set; }
@@ -29,17 +26,23 @@ public sealed class MonitorSampleBuilder
     public long PoolNonpagedBytes { get; set; }
     public long PoolPagedBytes { get; set; }
 
-    // Nya CPU/scheduler-fält
     public double ContextSwitchesPerSec { get; set; }
     public int ProcessorQueueLength { get; set; }
     public double DpcTimePercent { get; set; }
     public double InterruptTimePercent { get; set; }
 
-    // Nya diskfält
     public double AvgDiskSecRead { get; set; }
     public double AvgDiskSecWrite { get; set; }
 
-    // Composite scores (sätts av engine efter Collect)
+    public double CpuClockMHz { get; set; }
+    public double CpuMaxClockMHz { get; set; }
+    public double GpuUtilizationPercent { get; set; }
+    public long GpuDedicatedUsageBytes { get; set; }
+    public long GpuDedicatedLimitBytes { get; set; }
+    public double DnsLatencyMs { get; set; }
+    public int StorageErrorsLast15Min { get; set; }
+    public int TdrEventsLast15Min { get; set; }
+
     public int MemoryPressureIndex { get; set; }
     public int SystemLatencyScore { get; set; }
     public FreezeClassification? FreezeInfo { get; set; }
@@ -57,6 +60,9 @@ public sealed class MonitorSampleBuilder
         TopCpuProcesses: TopCpuProcesses,
         TopMemoryProcesses: TopMemoryProcesses,
         TopGdiProcesses: TopGdiProcesses,
+        TopIoProcesses: TopIoProcesses,
+        TopFaultProcesses: TopFaultProcesses,
+        DiskInstances: DiskInstances,
         HangingProcesses: HangingProcesses,
         PagesInputPerSec: PagesInputPerSec,
         PagesOutputPerSec: PagesOutputPerSec,
@@ -70,6 +76,14 @@ public sealed class MonitorSampleBuilder
         InterruptTimePercent: InterruptTimePercent,
         AvgDiskSecRead: AvgDiskSecRead,
         AvgDiskSecWrite: AvgDiskSecWrite,
+        CpuClockMHz: CpuClockMHz,
+        CpuMaxClockMHz: CpuMaxClockMHz,
+        GpuUtilizationPercent: GpuUtilizationPercent,
+        GpuDedicatedUsageBytes: GpuDedicatedUsageBytes,
+        GpuDedicatedLimitBytes: GpuDedicatedLimitBytes,
+        DnsLatencyMs: DnsLatencyMs,
+        StorageErrorsLast15Min: StorageErrorsLast15Min,
+        TdrEventsLast15Min: TdrEventsLast15Min,
         MemoryPressureIndex: MemoryPressureIndex,
         SystemLatencyScore: SystemLatencyScore,
         FreezeInfo: FreezeInfo

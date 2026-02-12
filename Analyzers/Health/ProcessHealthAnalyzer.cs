@@ -24,6 +24,7 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
 
     // CPU baseline for per-process CPU calculation
     private readonly Dictionary<int, (string Name, TimeSpan CpuTime)> _prevCpuTimes = new();
+    private readonly Dictionary<int, long> _prevPageFaults = new();
     private bool _hasPrevCpuTimes;
 
     public void Collect(MonitorSampleBuilder builder)
@@ -31,11 +32,14 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
         var topCpu = new List<MonitorProcessInfo>();
         var topMemory = new List<MonitorProcessInfo>();
         var topGdi = new List<MonitorProcessInfo>();
+        var topIo = new List<MonitorIoProcessInfo>();
+        var topFaults = new List<MonitorFaultProcessInfo>();
         var hangingNames = new List<string>();
         long totalSystemHandles = 0;
         int cpuCount = Environment.ProcessorCount;
 
         var currentCpuTimes = new Dictionary<int, (string Name, TimeSpan CpuTime)>();
+        var currentPageFaults = new Dictionary<int, long>();
 
         foreach (var proc in Process.GetProcesses())
         {
@@ -90,6 +94,33 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
                 long memBytes = 0;
                 try { memBytes = proc.WorkingSet64; } catch { }
 
+                try
+                {
+                    long pf = proc.PageFaults;
+                    currentPageFaults[proc.Id] = pf;
+                    if (_prevPageFaults.TryGetValue(proc.Id, out var prevPf) && pf > prevPf)
+                    {
+                        double perSec = (pf - prevPf) / (SampleIntervalMs / 1000.0);
+                        if (perSec > 10)
+                            topFaults.Add(new MonitorFaultProcessInfo(proc.ProcessName, proc.Id, perSec));
+                    }
+                }
+                catch { }
+
+                if (proc.TryGetIoCounters(out var io))
+                {
+                    ulong totalIo = io.ReadTransferCount + io.WriteTransferCount;
+                    if (totalIo > 0)
+                    {
+                        topIo.Add(new MonitorIoProcessInfo(
+                            proc.ProcessName,
+                            proc.Id,
+                            io.ReadTransferCount,
+                            io.WriteTransferCount,
+                            totalIo));
+                    }
+                }
+
                 var info = new MonitorProcessInfo(
                     proc.ProcessName, proc.Id, procCpu, memBytes,
                     handleCount, gdiObjects, userObjects, threadCount);
@@ -108,6 +139,10 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
             _prevCpuTimes[kvp.Key] = kvp.Value;
         _hasPrevCpuTimes = true;
 
+        _prevPageFaults.Clear();
+        foreach (var kvp in currentPageFaults)
+            _prevPageFaults[kvp.Key] = kvp.Value;
+
         // Build hanging process info with duration from tracker
         var hangingProcesses = hangingNames.Distinct().Select(name =>
         {
@@ -121,6 +156,8 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
         builder.TopCpuProcesses = topCpu.OrderByDescending(p => p.CpuPercent).Take(5).ToList();
         builder.TopMemoryProcesses = topMemory.OrderByDescending(p => p.MemoryBytes).Take(5).ToList();
         builder.TopGdiProcesses = topGdi.OrderByDescending(p => p.GdiObjects).Take(5).ToList();
+        builder.TopIoProcesses = topIo.OrderByDescending(p => p.TotalBytes).Take(5).ToList();
+        builder.TopFaultProcesses = topFaults.OrderByDescending(p => p.PageFaultsPerSec).Take(5).ToList();
         builder.HangingProcesses = hangingProcesses;
     }
 
