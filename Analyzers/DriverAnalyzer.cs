@@ -205,7 +205,7 @@ public sealed class DriverAnalyzer : IAnalyzer
         try
         {
             var drivers = WmiHelper.Query(
-                "SELECT DeviceName, ConfigManagerErrorCode, IsSigned FROM Win32_PnPSignedDriver");
+                "SELECT DeviceName, IsSigned FROM Win32_PnPSignedDriver");
 
             if (drivers.Count == 0)
             {
@@ -215,8 +215,12 @@ public sealed class DriverAnalyzer : IAnalyzer
             }
 
             int totalDrivers = drivers.Count;
-            int problemDrivers = drivers.Count(d => WmiHelper.GetValue<uint>(d, "ConfigManagerErrorCode", 0) != 0);
             int unsignedDrivers = drivers.Count(d => !WmiHelper.GetValue<bool>(d, "IsSigned", true));
+
+            // Check for devices with problems separately
+            var problemDevices = WmiHelper.Query(
+                "SELECT Name FROM Win32_PnPEntity WHERE ConfigManagerErrorCode <> 0");
+            int problemDrivers = problemDevices.Count;
 
             var severity = problemDrivers > 0 || unsignedDrivers > 0 ? Severity.Warning : Severity.Ok;
 
