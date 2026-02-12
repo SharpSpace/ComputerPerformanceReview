@@ -96,13 +96,15 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
 
                 try
                 {
-                    long pf = proc.PageFaults;
-                    currentPageFaults[proc.Id] = pf;
-                    if (_prevPageFaults.TryGetValue(proc.Id, out var prevPf) && pf > prevPf)
+                    if (proc.TryGetPageFaultCount(out var pf))
                     {
-                        double perSec = (pf - prevPf) / (SampleIntervalMs / 1000.0);
-                        if (perSec > 10)
-                            topFaults.Add(new MonitorFaultProcessInfo(proc.ProcessName, proc.Id, perSec));
+                        currentPageFaults[proc.Id] = pf;
+                        if (_prevPageFaults.TryGetValue(proc.Id, out var prevPf) && pf > prevPf)
+                        {
+                            double perSec = (pf - prevPf) / (SampleIntervalMs / 1000.0);
+                            if (perSec > 10)
+                                topFaults.Add(new MonitorFaultProcessInfo(proc.ProcessName, proc.Id, perSec));
+                        }
                     }
                 }
                 catch { }

@@ -6,5 +6,6 @@ namespace ComputerPerformanceReview.Models;
 public sealed record FreezeClassification(
     string ProcessName,
     string LikelyCause,
-    string Description
+    string Description,
+    List<string>? Evidence = null
 );

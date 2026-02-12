@@ -1,4 +1,7 @@
+using System.Security.Principal;
+
 ConsoleHelper.Init();
+CheckAdminPrivileges();
 
 // Parse command line arguments
 var mode = ParseArgs(args, out int monitorMinutes);
@@ -18,6 +21,97 @@ else
 }
 
 return;
+
+// --- Admin check ---
+
+static void CheckAdminPrivileges()
+{
+    using var identity = WindowsIdentity.GetCurrent();
+    var principal = new WindowsPrincipal(identity);
+    bool isAdmin = principal.IsInRole(WindowsBuiltInRole.Administrator);
+
+    if (isAdmin)
+        return;
+
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine();
+    Console.WriteLine("  ╔══════════════════════════════════════════════════════════════════╗");
+    Console.WriteLine("  ║  Programmet körs UTAN administratörsbehörighet                  ║");
+    Console.WriteLine("  ╚══════════════════════════════════════════════════════════════════╝");
+    Console.ResetColor();
+    Console.WriteLine();
+    Console.ForegroundColor = ConsoleColor.Gray;
+    Console.WriteLine("  Utan admin-rättigheter kan programmet inte:");
+    Console.ForegroundColor = ConsoleColor.White;
+    Console.WriteLine("    - Läsa lagringsfel från systemloggen (Event Log)");
+    Console.WriteLine("    - Läsa GPU TDR-händelser");
+    Console.WriteLine("    - Hämta I/O-data per process");
+    Console.WriteLine("    - Hämta page faults per process");
+    Console.WriteLine("    - Läsa handles/GDI för skyddade processer");
+    Console.ForegroundColor = ConsoleColor.Gray;
+    Console.WriteLine();
+    Console.WriteLine("  Programmet fungerar ändå, men ger mer komplett data som admin.");
+    Console.ResetColor();
+    Console.WriteLine();
+
+    Console.ForegroundColor = ConsoleColor.Cyan;
+    Console.Write("  Vill du starta om som administratör? (J/N): ");
+    Console.ResetColor();
+
+    while (true)
+    {
+        var key = Console.ReadKey(true);
+        if (key.Key == ConsoleKey.J || key.KeyChar == 'j' || key.KeyChar == 'J')
+        {
+            Console.WriteLine("J");
+            RestartAsAdmin();
+            return;
+        }
+        if (key.Key == ConsoleKey.N || key.KeyChar == 'n' || key.KeyChar == 'N'
+            || key.Key == ConsoleKey.Enter)
+        {
+            Console.WriteLine("N");
+            Console.WriteLine();
+            return;
+        }
+    }
+}
+
+static void RestartAsAdmin()
+{
+    try
+    {
+        var exePath = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath))
+        {
+            ConsoleHelper.WriteError("Kunde inte hitta programmets sökväg.");
+            return;
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = exePath,
+            UseShellExecute = true,
+            Verb = "runas"
+        };
+
+        Process.Start(startInfo);
+        Environment.Exit(0);
+    }
+    catch (System.ComponentModel.Win32Exception)
+    {
+        // Användaren tryckte "Nej" i UAC-dialogen
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine();
+        Console.WriteLine("  UAC-begäran avvisades. Fortsätter utan admin-rättigheter.");
+        Console.ResetColor();
+        Console.WriteLine();
+    }
+    catch (Exception ex)
+    {
+        ConsoleHelper.WriteError($"Kunde inte starta om: {ex.Message}");
+    }
+}
 
 // --- Mode selection ---
 

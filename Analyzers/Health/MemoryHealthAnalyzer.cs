@@ -14,10 +14,17 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
     private const long PoolNonpagedWarning = 200L * 1024 * 1024;  // 200 MB
     private const long PoolNonpagedCritical = 400L * 1024 * 1024;  // 400 MB
 
+    // Cooldown — max 1 event per typ per 60 sek
+    private const int CooldownSeconds = 60;
+
     // State
     private int _consecutiveHighPagesInput;
     private int _consecutiveHighCommit;
     private int _consecutiveHighPool;
+    private DateTime _lastMemorySpikeTime = DateTime.MinValue;
+    private DateTime _lastPageFaultStormTime = DateTime.MinValue;
+    private DateTime _lastCommitExhaustionTime = DateTime.MinValue;
+    private DateTime _lastPoolExhaustionTime = DateTime.MinValue;
 
     public void Collect(MonitorSampleBuilder builder)
     {
@@ -69,8 +76,10 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
         if (current.PagesInputPerSec > PagesInputStormThreshold)
         {
             _consecutiveHighPagesInput++;
-            if (_consecutiveHighPagesInput == PagesInputStormConsecutive)
+            if (_consecutiveHighPagesInput == PagesInputStormConsecutive
+                && (DateTime.Now - _lastPageFaultStormTime).TotalSeconds > CooldownSeconds)
             {
+                _lastPageFaultStormTime = DateTime.Now;
                 bool isCritical = current.PagesInputPerSec > 1000;
                 healthScore -= isCritical ? 30 : 15;
 
@@ -101,26 +110,24 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
             long oldest = history[^MemoryGrowthWindowSamples].MemoryAvailableBytes;
             long newest = current.MemoryAvailableBytes;
             long drop = oldest - newest;
-            if (drop > MemoryGrowthThresholdBytes)
+            if (drop > MemoryGrowthThresholdBytes
+                && (DateTime.Now - _lastMemorySpikeTime).TotalSeconds > CooldownSeconds)
             {
-                bool recentEvent = history.Count > 0 && events.Any(e => e.EventType == "MemorySpike");
-                if (!recentEvent)
-                {
-                    bool isCritical = drop > 1024L * 1024 * 1024;
-                    healthScore -= isCritical ? 20 : 10;
+                _lastMemorySpikeTime = DateTime.Now;
+                bool isCritical = drop > 1024L * 1024 * 1024;
+                healthScore -= isCritical ? 20 : 10;
 
-                    var topMem = current.TopMemoryProcesses.Take(3)
-                        .Select(p => $"{p.Name} ({ConsoleHelper.FormatBytes(p.MemoryBytes)})")
-                        .ToList();
-                    string procList = topMem.Count > 0 ? $" Störst just nu: {string.Join(", ", topMem)}." : "";
+                var topMem = current.TopMemoryProcesses.Take(3)
+                    .Select(p => $"{p.Name} ({ConsoleHelper.FormatBytes(p.MemoryBytes)})")
+                    .ToList();
+                string procList = topMem.Count > 0 ? $" Störst just nu: {string.Join(", ", topMem)}." : "";
 
-                    events.Add(new MonitorEvent(
-                        DateTime.Now, "MemorySpike",
-                        $"Minnesökning: {ConsoleHelper.FormatBytes(drop)} förbrukat på 30 sek",
-                        isCritical ? "Critical" : "Warning",
-                        $"Stäng onödiga flikar i webbläsaren och tunga program du inte använder.{procList} "
-                        + "Om minnet konstant är högt: öka sidfilen eller överväg mer RAM."));
-                }
+                events.Add(new MonitorEvent(
+                    DateTime.Now, "MemorySpike",
+                    $"Minnesökning: {ConsoleHelper.FormatBytes(drop)} förbrukat på 30 sek.{procList}",
+                    isCritical ? "Critical" : "Warning",
+                    $"Stäng onödiga flikar i webbläsaren och tunga program du inte använder.{procList} "
+                    + "Om minnet konstant är högt: öka sidfilen eller överväg mer RAM."));
             }
         }
 
@@ -131,8 +138,10 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
             if (commitRatio > CommitExhaustionWarning)
             {
                 _consecutiveHighCommit++;
-                if (_consecutiveHighCommit == 2)
+                if (_consecutiveHighCommit == 2
+                    && (DateTime.Now - _lastCommitExhaustionTime).TotalSeconds > CooldownSeconds)
                 {
+                    _lastCommitExhaustionTime = DateTime.Now;
                     bool isCritical = commitRatio > CommitExhaustionCritical;
                     healthScore -= isCritical ? 25 : 10;
                     var topMem = current.TopMemoryProcesses.Take(3)
@@ -159,8 +168,10 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
         if (current.PoolNonpagedBytes > PoolNonpagedWarning)
         {
             _consecutiveHighPool++;
-            if (_consecutiveHighPool == 2)
+            if (_consecutiveHighPool == 2
+                && (DateTime.Now - _lastPoolExhaustionTime).TotalSeconds > CooldownSeconds)
             {
+                _lastPoolExhaustionTime = DateTime.Now;
                 bool isCritical = current.PoolNonpagedBytes > PoolNonpagedCritical;
                 healthScore -= isCritical ? 20 : 10;
                 events.Add(new MonitorEvent(

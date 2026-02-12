@@ -14,6 +14,10 @@ public static partial class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetProcessIoCounters(IntPtr hProcess, out IoCounters counters);
 
+    [DllImport("psapi.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetProcessMemoryInfo(IntPtr hProcess, out ProcessMemoryCountersEx counters, uint size);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct IoCounters
     {
@@ -23,6 +27,22 @@ public static partial class NativeMethods
         public ulong ReadTransferCount;
         public ulong WriteTransferCount;
         public ulong OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ProcessMemoryCountersEx
+    {
+        public uint cb;
+        public uint PageFaultCount;
+        public nuint PeakWorkingSetSize;
+        public nuint WorkingSetSize;
+        public nuint QuotaPeakPagedPoolUsage;
+        public nuint QuotaPagedPoolUsage;
+        public nuint QuotaPeakNonPagedPoolUsage;
+        public nuint QuotaNonPagedPoolUsage;
+        public nuint PagefileUsage;
+        public nuint PeakPagefileUsage;
+        public nuint PrivateUsage;
     }
 
     public static (int GdiObjects, int UserObjects) GetGuiResourceCounts(IntPtr processHandle)
@@ -50,5 +70,26 @@ public static partial class NativeMethods
             counters = default;
             return false;
         }
+    }
+
+    public static bool TryGetPageFaultCount(IntPtr processHandle, out long pageFaults)
+    {
+        pageFaults = 0;
+
+        try
+        {
+            var size = (uint)Marshal.SizeOf<ProcessMemoryCountersEx>();
+            var counters = new ProcessMemoryCountersEx();
+            if (GetProcessMemoryInfo(processHandle, out counters, size))
+            {
+                pageFaults = counters.PageFaultCount;
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
     }
 }

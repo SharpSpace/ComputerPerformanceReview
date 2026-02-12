@@ -237,10 +237,22 @@ public static class MonitorDisplay
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.Write("            → Trolig orsak: ");
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.Write(sample.FreezeInfo.LikelyCause);
+                Console.WriteLine(sample.FreezeInfo.LikelyCause);
+
+                // Evidence list — visar bevis för klassificeringen
+                if (sample.FreezeInfo.Evidence is { Count: > 0 })
+                {
+                    foreach (var ev in sample.FreezeInfo.Evidence)
+                    {
+                        Console.ForegroundColor = ev.StartsWith("⚠")
+                            ? ConsoleColor.Yellow
+                            : ConsoleColor.DarkGray;
+                        Console.WriteLine($"              {ev}");
+                    }
+                }
+
                 Console.ForegroundColor = ConsoleColor.DarkGray;
-                Console.Write("  ");
-                WriteWrapped($"  {sample.FreezeInfo.Description}", 72);
+                WriteWrapped($"              {sample.FreezeInfo.Description}", 72);
                 Console.ResetColor();
             }
         }

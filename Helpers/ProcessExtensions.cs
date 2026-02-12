@@ -18,4 +18,21 @@ public static class ProcessExtensions
             return false;
         }
     }
+
+    public static bool TryGetPageFaultCount(this Process process, out long pageFaults)
+    {
+        pageFaults = 0;
+
+        try
+        {
+            if (process.HasExited)
+                return false;
+
+            return NativeMethods.TryGetPageFaultCount(process.Handle, out pageFaults);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
