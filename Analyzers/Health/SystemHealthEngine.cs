@@ -40,6 +40,9 @@ public sealed class SystemHealthEngine
     private readonly List<long> _poolPagedSamples = [];
     private readonly List<int> _memPressureSamples = [];
     private readonly List<int> _latencyScoreSamples = [];
+    private readonly List<double> _gpuUtilSamples = [];
+    private readonly List<double> _dnsLatencySamples = [];
+    private readonly List<int> _storageErrorSamples = [];
     private int _freezeCount;
 
     public List<MonitorEvent> AllEvents { get; } = [];
@@ -52,6 +55,8 @@ public sealed class SystemHealthEngine
             new MemoryHealthAnalyzer(),
             new CpuSchedulerHealthAnalyzer(),
             new DiskHealthAnalyzer(),
+            new GpuHealthAnalyzer(),
+            new NetworkLatencyHealthAnalyzer(),
             _processAnalyzer
         ];
         InitializeNetworkBaseline();
@@ -142,6 +147,9 @@ public sealed class SystemHealthEngine
             PeakAvgDiskSecWrite: SafeMax(_diskSecWriteSamples),
             PeakPoolNonpagedBytes: _poolNonpagedSamples.Count > 0 ? _poolNonpagedSamples.Max() : 0,
             PeakPoolPagedBytes: _poolPagedSamples.Count > 0 ? _poolPagedSamples.Max() : 0,
+            PeakGpuUtilizationPercent: SafeMax(_gpuUtilSamples),
+            PeakDnsLatencyMs: SafeMax(_dnsLatencySamples),
+            PeakStorageErrorsLast15Min: _storageErrorSamples.Count > 0 ? _storageErrorSamples.Max() : 0,
             AvgMemoryPressureIndex: _memPressureSamples.Count > 0 ? (int)_memPressureSamples.Average() : 0,
             PeakMemoryPressureIndex: _memPressureSamples.Count > 0 ? _memPressureSamples.Max() : 0,
             AvgSystemLatencyScore: _latencyScoreSamples.Count > 0 ? (int)_latencyScoreSamples.Average() : 0,
@@ -349,6 +357,9 @@ public sealed class SystemHealthEngine
         _poolPagedSamples.Add(s.PoolPagedBytes);
         _memPressureSamples.Add(s.MemoryPressureIndex);
         _latencyScoreSamples.Add(s.SystemLatencyScore);
+        _gpuUtilSamples.Add(s.GpuUtilizationPercent);
+        _dnsLatencySamples.Add(s.DnsLatencyMs);
+        _storageErrorSamples.Add(s.StorageErrorsLast15Min);
     }
 
     private static double SafeAvg(List<double> list) => list.Count > 0 ? list.Average() : 0;

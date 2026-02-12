@@ -23,6 +23,31 @@ public static class FreezeDetector
                 + "Om SSD: kontrollera TRIM och firmware. Om HDD: överväg SSD-uppgradering.");
         }
 
+
+        if (sample.GpuUtilizationPercent > 95)
+        {
+            return new FreezeClassification(
+                processName,
+                "GPU-mättnad",
+                $"GPU ligger på {sample.GpuUtilizationPercent:F0}%. UI-rendering kan blockeras av grafikbelastning eller drivrutinsproblem.");
+        }
+
+        if (sample.DnsLatencyMs > 300)
+        {
+            return new FreezeClassification(
+                processName,
+                "Nätverkslatens",
+                $"DNS-latens är {sample.DnsLatencyMs:F0}ms. Processen kan vänta på nätverkssvar trots låg CPU/disk.");
+        }
+
+        if (sample.StorageErrorsLast15Min > 0)
+        {
+            return new FreezeClassification(
+                processName,
+                "Lagringsfel",
+                $"Systemloggen visar {sample.StorageErrorsLast15Min} lagringsfel senaste 15 min. Controller/disk-timeouts kan orsaka hängningar.");
+        }
+
         // CPU-mättnad: processorn är fullt belastad
         if (sample.CpuPercent > 80)
         {

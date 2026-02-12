@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 namespace ComputerPerformanceReview.Models;
 
 public sealed record MonitorSample(
-    // --- Grundläggande (befintliga) ---
     DateTime Timestamp,
     double CpuPercent,
     double MemoryUsedPercent,
@@ -16,36 +15,36 @@ public sealed record MonitorSample(
     List<MonitorProcessInfo> TopCpuProcesses,
     List<MonitorProcessInfo> TopMemoryProcesses,
     List<MonitorProcessInfo> TopGdiProcesses,
+    List<MonitorIoProcessInfo> TopIoProcesses,
+    List<MonitorFaultProcessInfo> TopFaultProcesses,
+    List<DiskInstanceStat> DiskInstances,
     List<HangingProcessInfo> HangingProcesses,
-
-    // --- Nya minnesfält ---
     double PagesInputPerSec = 0,
     double PagesOutputPerSec = 0,
     long CommitLimit = 0,
     long AvailableMBytes = 0,
     long PoolNonpagedBytes = 0,
     long PoolPagedBytes = 0,
-
-    // --- Nya CPU/scheduler-fält ---
     double ContextSwitchesPerSec = 0,
     int ProcessorQueueLength = 0,
     double DpcTimePercent = 0,
     double InterruptTimePercent = 0,
-
-    // --- Nya diskfält ---
     double AvgDiskSecRead = 0,
     double AvgDiskSecWrite = 0,
-
-    // --- Composite scores (beräknade, inte insamlade) ---
+    double CpuClockMHz = 0,
+    double CpuMaxClockMHz = 0,
+    double GpuUtilizationPercent = 0,
+    long GpuDedicatedUsageBytes = 0,
+    long GpuDedicatedLimitBytes = 0,
+    double DnsLatencyMs = 0,
+    int StorageErrorsLast15Min = 0,
+    int TdrEventsLast15Min = 0,
     int MemoryPressureIndex = 0,
     int SystemLatencyScore = 0,
     FreezeClassification? FreezeInfo = null
 );
 
-public sealed record HangingProcessInfo(
-    string Name,
-    double HangSeconds
-);
+public sealed record HangingProcessInfo(string Name, double HangSeconds);
 
 public sealed record MonitorProcessInfo(
     string Name,
@@ -57,6 +56,10 @@ public sealed record MonitorProcessInfo(
     int UserObjects,
     int ThreadCount = 0
 );
+
+public sealed record MonitorIoProcessInfo(string Name, int Pid, ulong ReadBytes, ulong WriteBytes, ulong TotalBytes);
+public sealed record MonitorFaultProcessInfo(string Name, int Pid, double PageFaultsPerSec);
+public sealed record DiskInstanceStat(string Name, double QueueLength, double ReadLatencyMs, double WriteLatencyMs, double BusyPercent);
 
 public sealed record MonitorEvent(
     DateTime Timestamp,
@@ -71,7 +74,6 @@ public sealed record MonitorReport(
     DateTime EndTime,
     int TotalSamples,
     List<MonitorEvent> Events,
-    // Befintliga
     double AvgCpu,
     double PeakCpu,
     double AvgMemory,
@@ -83,7 +85,6 @@ public sealed record MonitorReport(
     long PeakSystemHandles,
     double PeakPageFaults,
     long PeakCommittedBytes,
-    // Nya
     double PeakPagesInputPerSec = 0,
     double PeakDpcTimePercent = 0,
     double PeakInterruptTimePercent = 0,
@@ -93,6 +94,9 @@ public sealed record MonitorReport(
     double PeakAvgDiskSecWrite = 0,
     long PeakPoolNonpagedBytes = 0,
     long PeakPoolPagedBytes = 0,
+    double PeakGpuUtilizationPercent = 0,
+    double PeakDnsLatencyMs = 0,
+    int PeakStorageErrorsLast15Min = 0,
     int AvgMemoryPressureIndex = 0,
     int PeakMemoryPressureIndex = 0,
     int AvgSystemLatencyScore = 0,

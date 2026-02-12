@@ -15,6 +15,7 @@ public sealed class CpuSchedulerHealthAnalyzer : IHealthSubAnalyzer
     private int _consecutiveHighCpu;
     private int _consecutiveHighDpc;
     private int _consecutiveSchedulerContention;
+    private int _consecutiveClockThrottle;
 
     public void Collect(MonitorSampleBuilder builder)
     {
@@ -37,6 +38,19 @@ public sealed class CpuSchedulerHealthAnalyzer : IHealthSubAnalyzer
             {
                 builder.DpcTimePercent = WmiHelper.GetValue<double>(procData[0], "PercentDPCTime");
                 builder.InterruptTimePercent = WmiHelper.GetValue<double>(procData[0], "PercentInterruptTime");
+            }
+        }
+        catch { }
+
+
+        // CPU clock throttling signals
+        try
+        {
+            var cpuClock = WmiHelper.Query("SELECT CurrentClockSpeed, MaxClockSpeed FROM Win32_Processor");
+            if (cpuClock.Count > 0)
+            {
+                builder.CpuClockMHz = cpuClock.Average(c => WmiHelper.GetValue<double>(c, "CurrentClockSpeed"));
+                builder.CpuMaxClockMHz = cpuClock.Average(c => WmiHelper.GetValue<double>(c, "MaxClockSpeed"));
             }
         }
         catch { }
@@ -134,12 +148,38 @@ public sealed class CpuSchedulerHealthAnalyzer : IHealthSubAnalyzer
             _consecutiveSchedulerContention = 0;
         }
 
+
+        // 4. Thermal/power throttling (low clocks under load)
+        if (current.CpuMaxClockMHz > 0)
+        {
+            double ratio = current.CpuClockMHz / current.CpuMaxClockMHz;
+            if (current.CpuPercent > 40 && ratio < 0.6)
+            {
+                _consecutiveClockThrottle++;
+                if (_consecutiveClockThrottle == 2)
+                {
+                    healthScore -= 15;
+                    events.Add(new MonitorEvent(
+                        DateTime.Now, "CpuThrottle",
+                        $"CPU-throttling: {current.CpuClockMHz:F0}/{current.CpuMaxClockMHz:F0} MHz ({ratio * 100:F0}%) vid {current.CpuPercent:F0}% last",
+                        ratio < 0.4 ? "Critical" : "Warning",
+                        "Processorn går med låg frekvens under belastning. Kontrollera temperaturer, strömplan, BIOS-inställningar och kylning."));
+                }
+            }
+            else
+            {
+                _consecutiveClockThrottle = 0;
+            }
+        }
+
         healthScore = Math.Clamp(healthScore, 0, 100);
         double confidence = history.Count >= 3 ? 1.0 : history.Count / 3.0;
 
         string? hint = null;
         if (current.DpcTimePercent > DpcStormThreshold)
             hint = "Drivrutinsproblem: hög DPC-tid indikerar en drivrutin som blockerar processorn";
+        else if (current.CpuMaxClockMHz > 0 && current.CpuClockMHz / current.CpuMaxClockMHz < 0.6 && current.CpuPercent > 40)
+            hint = "CPU-throttling: låg klockfrekvens under belastning";
         else if (healthScore < 50)
             hint = "CPU-mättnad eller scheduler-trängsel";
 

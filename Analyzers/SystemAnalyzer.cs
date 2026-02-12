@@ -12,11 +12,40 @@ public sealed class SystemAnalyzer : IAnalyzer
 
         AnalyzeUptime(results);
         AnalyzePageFile(results);
+        AnalyzePageFileLocation(results);
         CheckPendingRestart(results);
         CheckLastUpdate(results);
         CheckAdminStatus(results);
 
         return Task.FromResult(new AnalysisReport("SYSTEMKONTROLLER", results));
+    }
+
+    private static void AnalyzePageFileLocation(List<AnalysisResult> results)
+    {
+        try
+        {
+            var settings = WmiHelper.Query("SELECT Name FROM Win32_PageFileSetting");
+            if (settings.Count == 0)
+                return;
+
+            var locations = settings
+                .Select(s => WmiHelper.GetValue<string>(s, "Name"))
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (locations.Count == 0)
+                return;
+
+            results.Add(new AnalysisResult(
+                "System",
+                "Växlingsfil plats",
+                $"Pagefile: {string.Join(", ", locations)}",
+                Severity.Ok,
+                "Om växlingsfilen ligger på HDD kan det orsaka tröghet vid minnestryck."));
+        }
+        catch { }
     }
 
     private static void AnalyzeUptime(List<AnalysisResult> results)

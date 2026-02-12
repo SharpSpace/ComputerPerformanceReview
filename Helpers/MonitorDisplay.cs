@@ -111,6 +111,32 @@ public static class MonitorDisplay
         Console.Write($"R {diskLatR:F1}ms  W {diskLatW:F1}ms");
         Console.ResetColor();
         Console.WriteLine();
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.Write("  CPUClk: ");
+        double clockRatio = sample.CpuMaxClockMHz > 0 ? sample.CpuClockMHz / sample.CpuMaxClockMHz : 0;
+        Console.ForegroundColor = clockRatio > 0 && clockRatio < 0.6 && sample.CpuPercent > 40 ? ConsoleColor.Yellow : ConsoleColor.White;
+        if (sample.CpuMaxClockMHz > 0)
+            Console.Write($"{sample.CpuClockMHz:F0}/{sample.CpuMaxClockMHz:F0} MHz");
+        else
+            Console.Write("n/a");
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.Write("  GPU: ");
+        Console.ForegroundColor = sample.GpuUtilizationPercent > 95 ? ConsoleColor.Yellow : ConsoleColor.White;
+        Console.Write($"{sample.GpuUtilizationPercent:F0}%");
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.Write("  DNS: ");
+        Console.ForegroundColor = sample.DnsLatencyMs > 300 ? ConsoleColor.Yellow : ConsoleColor.White;
+        Console.Write($"{sample.DnsLatencyMs:F0} ms");
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.Write("  StorageErr(15m): ");
+        Console.ForegroundColor = sample.StorageErrorsLast15Min > 0 ? ConsoleColor.Yellow : ConsoleColor.White;
+        Console.Write($"{sample.StorageErrorsLast15Min}");
+        Console.ResetColor();
+        Console.WriteLine();
         Console.WriteLine();
 
         // Top CPU processes
@@ -137,6 +163,37 @@ public static class MonitorDisplay
             Console.WriteLine(topStr);
         }
 
+        if (sample.TopIoProcesses.Count > 0)
+        {
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.Write("  Topp I/O: ");
+            Console.ResetColor();
+            var topStr = string.Join(", ",
+                sample.TopIoProcesses.Take(3)
+                    .Select(p => $"{p.Name} ({ConsoleHelper.FormatBytes((long)p.TotalBytes)})"));
+            Console.WriteLine(topStr);
+        }
+
+
+        if (sample.TopFaultProcesses.Count > 0)
+        {
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.Write("  Topp Faults: ");
+            Console.ResetColor();
+            var topStr = string.Join(", ",
+                sample.TopFaultProcesses.Take(3)
+                    .Select(p => $"{p.Name} ({p.PageFaultsPerSec:F0}/s)"));
+            Console.WriteLine(topStr);
+        }
+
+        if (sample.DiskInstances.Count > 0)
+        {
+            var worst = sample.DiskInstances.OrderByDescending(d => Math.Max(d.ReadLatencyMs, d.WriteLatencyMs)).First();
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.Write("  Värst disk: ");
+            Console.ResetColor();
+            Console.WriteLine($"{worst.Name} (R {worst.ReadLatencyMs:F1}ms, W {worst.WriteLatencyMs:F1}ms, kö {worst.QueueLength:F1}, busy {worst.BusyPercent:F0}%)");
+        }
         // GDI warnings
         var highGdi = sample.TopGdiProcesses
             .Where(p => p.GdiObjects > 2000)
@@ -295,6 +352,9 @@ public static class MonitorDisplay
         WritePeakStat("Disk Write Lat (peak)", $"{report.PeakAvgDiskSecWrite * 1000:F1} ms", report.PeakAvgDiskSecWrite * 1000 > 50);
         WritePeakStat("Pool Nonpaged (peak)", ConsoleHelper.FormatBytes(report.PeakPoolNonpagedBytes), report.PeakPoolNonpagedBytes > 200L * 1024 * 1024);
         WritePeakStat("Pool Paged (peak)", ConsoleHelper.FormatBytes(report.PeakPoolPagedBytes), false);
+        WritePeakStat("GPU (peak)", $"{report.PeakGpuUtilizationPercent:F0}%", report.PeakGpuUtilizationPercent > 95);
+        WritePeakStat("DNS Latens (peak)", $"{report.PeakDnsLatencyMs:F0} ms", report.PeakDnsLatencyMs > 300);
+        WritePeakStat("Storage errors (15m peak)", $"{report.PeakStorageErrorsLast15Min}", report.PeakStorageErrorsLast15Min > 0);
 
         if (report.FreezeCount > 0)
         {
@@ -402,6 +462,12 @@ public static class MonitorDisplay
         ["GdiLeak"] = "GDI-varningar",
         ["ThreadExplosion"] = "Tråd-explosioner",
         ["DpcStorm"] = "DPC-stormar",
+        ["CpuThrottle"] = "CPU-throttling",
+        ["GpuSaturation"] = "GPU-mättnad",
+        ["GpuVramPressure"] = "VRAM-tryck",
+        ["GpuTdr"] = "GPU TDR",
+        ["StorageReset"] = "Lagringsfel",
+        ["DnsLatency"] = "DNS-latens",
         ["SchedulerContention"] = "Scheduler-trängsel",
         ["CommitExhaustion"] = "Commit-gräns",
         ["PoolExhaustion"] = "Kernel pool"

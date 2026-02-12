@@ -2,21 +2,30 @@ namespace ComputerPerformanceReview.Analyzers;
 
 public sealed class DiskAnalyzer : IAnalyzer
 {
+    private const int SnapshotScanTimeoutMs = 500;
+    private const int SnapshotScanMaxDepth = 2;
+
     public string Name => "Diskanalys";
 
     public Task<AnalysisReport> AnalyzeAsync()
     {
         var results = new List<AnalysisResult>();
 
-        AnalyzeDriveSpace(results);
+        bool hasHdd = HasHddDetected();
+
+        AnalyzeDriveSpace(results, hasHdd);
         AnalyzeTempFiles(results);
         AnalyzeAppDataLocal(results);
+        AnalyzeDiskLatency(results);
+        AnalyzeDiskBusyPercentage(results);
+        AnalyzeTopIoProcesses(results);
+        AnalyzeSmartStatus(results);
         DetectDiskType(results);
 
         return Task.FromResult(new AnalysisReport("DISKANALYS", results));
     }
 
-    private static void AnalyzeDriveSpace(List<AnalysisResult> results)
+    private static void AnalyzeDriveSpace(List<AnalysisResult> results, bool hasHdd)
     {
         foreach (var drive in DriveInfo.GetDrives())
         {
@@ -34,11 +43,23 @@ public sealed class DiskAnalyzer : IAnalyzer
                     _ => Severity.Ok
                 };
 
+                if (hasHdd && usedPercent > 85 && severity == Severity.Ok)
+                    severity = Severity.Warning;
+
+                string? recommendation = severity != Severity.Ok
+                    ? $"Frigör utrymme på {drive.Name.TrimEnd('\\')}"
+                    : null;
+
+                if (hasHdd && usedPercent > 85)
+                {
+                    recommendation = "HDD med hög fyllnadsgrad kan ge fragmentering och mikro-frysningar. Frigör utrymme eller flytta data.";
+                }
+
                 results.Add(new AnalysisResult("Disk", $"Enhet {drive.Name}",
                     $"{drive.Name.TrimEnd('\\')} {ConsoleHelper.FormatBytes(drive.AvailableFreeSpace)} ledigt " +
                     $"av {ConsoleHelper.FormatBytes(drive.TotalSize)} ({usedPercent:F1}% använt)",
                     severity,
-                    severity != Severity.Ok ? $"Frigör utrymme på {drive.Name.TrimEnd('\\')}" : null));
+                    recommendation));
             }
             catch { }
         }
@@ -54,16 +75,7 @@ public sealed class DiskAnalyzer : IAnalyzer
 
             try
             {
-                foreach (var file in Directory.EnumerateFiles(tempPath, "*", SearchOption.AllDirectories))
-                {
-                    try
-                    {
-                        var fi = new FileInfo(file);
-                        totalSize += fi.Length;
-                        fileCount++;
-                    }
-                    catch { }
-                }
+                (totalSize, fileCount) = GetDirectorySizeFast(tempPath, SnapshotScanMaxDepth, SnapshotScanTimeoutMs);
             }
             catch { }
 
@@ -98,7 +110,7 @@ public sealed class DiskAnalyzer : IAnalyzer
             {
                 try
                 {
-                    long size = GetDirectorySize(dir);
+                    long size = GetDirectorySizeFast(dir, SnapshotScanMaxDepth, SnapshotScanTimeoutMs).Size;
                     if (size > 100 * 1024 * 1024) // Only show folders > 100 MB
                     {
                         folderSizes.Add((Path.GetFileName(dir), dir, size));
@@ -288,22 +300,198 @@ public sealed class DiskAnalyzer : IAnalyzer
         }
     }
 
-    private static long GetDirectorySize(string path)
+    private static (long Size, int FileCount) GetDirectorySizeFast(string path, int maxDepth, int timeoutMs)
     {
+        var sw = Stopwatch.StartNew();
+        return GetDirectorySizeInternal(path, 0, maxDepth, sw, timeoutMs);
+    }
+
+    private static (long Size, int FileCount) GetDirectorySizeInternal(
+        string path,
+        int depth,
+        int maxDepth,
+        Stopwatch sw,
+        int timeoutMs)
+    {
+        if (depth > maxDepth || sw.ElapsedMilliseconds > timeoutMs)
+            return (0, 0);
+
         long size = 0;
+        int fileCount = 0;
+
         try
         {
-            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            foreach (var file in Directory.EnumerateFiles(path))
             {
+                if (sw.ElapsedMilliseconds > timeoutMs)
+                    break;
+
                 try
                 {
                     size += new FileInfo(file).Length;
+                    fileCount++;
                 }
                 catch { }
             }
+
+            if (depth < maxDepth && sw.ElapsedMilliseconds <= timeoutMs)
+            {
+                foreach (var dir in Directory.EnumerateDirectories(path))
+                {
+                    if (sw.ElapsedMilliseconds > timeoutMs)
+                        break;
+
+                    var child = GetDirectorySizeInternal(dir, depth + 1, maxDepth, sw, timeoutMs);
+                    size += child.Size;
+                    fileCount += child.FileCount;
+                }
+            }
         }
         catch { }
-        return size;
+
+        return (size, fileCount);
+    }
+
+    private static void AnalyzeDiskLatency(List<AnalysisResult> results)
+    {
+        try
+        {
+            using var read = new PerformanceCounter("PhysicalDisk", "Avg. Disk sec/Read", "_Total");
+            using var write = new PerformanceCounter("PhysicalDisk", "Avg. Disk sec/Write", "_Total");
+
+            read.NextValue();
+            write.NextValue();
+            Thread.Sleep(100);
+
+            double readLatency = read.NextValue();
+            double writeLatency = write.NextValue();
+            double worst = Math.Max(readLatency, writeLatency);
+
+            var severity = worst switch
+            {
+                > 0.15 => Severity.Critical,
+                > 0.05 => Severity.Warning,
+                _ => Severity.Ok
+            };
+
+            results.Add(new AnalysisResult(
+                "Disk",
+                "Disk-latens",
+                $"Läs: {readLatency * 1000:F1} ms, Skriv: {writeLatency * 1000:F1} ms",
+                severity,
+                severity != Severity.Ok ? "Hög disk-latens kan orsaka frysningar trots låg CPU" : null));
+        }
+        catch { }
+    }
+
+    private static void AnalyzeDiskBusyPercentage(List<AnalysisResult> results)
+    {
+        try
+        {
+            using var busy = new PerformanceCounter("PhysicalDisk", "% Disk Time", "_Total");
+            busy.NextValue();
+            Thread.Sleep(100);
+            var diskBusy = busy.NextValue();
+
+            var severity = diskBusy switch
+            {
+                > 95 => Severity.Critical,
+                > 80 => Severity.Warning,
+                _ => Severity.Ok
+            };
+
+            results.Add(new AnalysisResult(
+                "Disk",
+                "Diskbelastning",
+                $"Disk busy: {diskBusy:F1}%",
+                severity,
+                severity != Severity.Ok ? "Hög diskaktivitet kan ge trög respons även när CPU ser låg ut" : null));
+        }
+        catch { }
+    }
+
+    private static void AnalyzeTopIoProcesses(List<AnalysisResult> results)
+    {
+        try
+        {
+            var top = Process.GetProcesses()
+                .Select(proc =>
+                {
+                    try
+                    {
+                        if (!proc.TryGetIoCounters(out var io))
+                            return null;
+
+                        ulong total = io.ReadTransferCount + io.WriteTransferCount;
+                        return new { proc.ProcessName, TotalIo = total };
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                    finally
+                    {
+                        proc.Dispose();
+                    }
+                })
+                .Where(x => x is not null)
+                .OrderByDescending(x => x!.TotalIo)
+                .Take(5)
+                .ToList();
+
+            foreach (var item in top)
+            {
+                results.Add(new AnalysisResult(
+                    "Disk",
+                    "I/O-process",
+                    $"{item!.ProcessName}: {ConsoleHelper.FormatBytes((long)item.TotalIo)} totalt I/O",
+                    Severity.Ok));
+            }
+        }
+        catch { }
+    }
+
+    private static void AnalyzeSmartStatus(List<AnalysisResult> results)
+    {
+        try
+        {
+            var smartData = WmiHelper.Query(
+                "SELECT PredictFailure, InstanceName FROM MSStorageDriver_FailurePredictStatus",
+                @"\\.\root\WMI");
+
+            if (smartData.Count == 0)
+                return;
+
+            foreach (var disk in smartData)
+            {
+                bool predictFailure = WmiHelper.GetValue<bool>(disk, "PredictFailure");
+                string instanceName = WmiHelper.GetValue<string>(disk, "InstanceName") ?? "Disk";
+
+                results.Add(new AnalysisResult(
+                    "Disk",
+                    "SMART-status",
+                    $"{instanceName}: {(predictFailure ? "FELPROGNOS" : "OK")}",
+                    predictFailure ? Severity.Critical : Severity.Ok,
+                    predictFailure ? "Kritisk diskhälsa: säkerhetskopiera omedelbart och byt disk." : null));
+            }
+        }
+        catch { }
+    }
+
+    private static bool HasHddDetected()
+    {
+        try
+        {
+            var diskData = WmiHelper.Query(
+                "SELECT MediaType FROM MSFT_PhysicalDisk",
+                @"\\.\root\Microsoft\Windows\Storage");
+
+            return diskData.Any(disk => WmiHelper.GetValue<int>(disk, "MediaType") == 3);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void DetectDiskType(List<AnalysisResult> results)
