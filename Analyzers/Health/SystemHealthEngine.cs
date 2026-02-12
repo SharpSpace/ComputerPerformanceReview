@@ -86,12 +86,33 @@ public sealed class SystemHealthEngine
 
         // 5. Freeze detector — klassificera varje hängande process
         FreezeClassification? freezeInfo = null;
+        FreezeReport? deepFreezeReport = null;
         var sampleWithScores = builder.Build();
         if (sampleWithScores.HangingProcesses.Count > 0)
         {
             var firstHang = sampleWithScores.HangingProcesses[0];
             freezeInfo = FreezeDetector.Classify(firstHang.Name, sampleWithScores);
             builder.FreezeInfo = freezeInfo;
+            
+            // Deep freeze investigation for freezes > 5 seconds
+            if (firstHang.HangSeconds > 5)
+            {
+                // Try to find the process ID
+                var procInfo = sampleWithScores.TopCpuProcesses
+                    .Concat(sampleWithScores.TopMemoryProcesses)
+                    .FirstOrDefault(p => p.Name.Equals(firstHang.Name, StringComparison.OrdinalIgnoreCase));
+                
+                if (procInfo != null)
+                {
+                    deepFreezeReport = FreezeInvestigator.Investigate(
+                        firstHang.Name, 
+                        procInfo.Pid, 
+                        TimeSpan.FromSeconds(firstHang.HangSeconds), 
+                        sampleWithScores);
+                    builder.DeepFreezeReport = deepFreezeReport;
+                }
+            }
+            
             _freezeCount++;
         }
 

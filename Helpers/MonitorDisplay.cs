@@ -255,6 +255,87 @@ public static class MonitorDisplay
                 WriteWrapped($"              {sample.FreezeInfo.Description}", 72);
                 Console.ResetColor();
             }
+
+            // Deep freeze analysis (for freezes > 5 seconds)
+            if (sample.DeepFreezeReport is not null)
+            {
+                var report = sample.DeepFreezeReport;
+                Console.WriteLine();
+                Console.ForegroundColor = ConsoleColor.Magenta;
+                Console.WriteLine("            ┌─ DJUPANALYS (Deep Freeze Investigation) ─────────────┐");
+                Console.ResetColor();
+                
+                Console.ForegroundColor = ConsoleColor.Gray;
+                Console.Write("              Process: ");
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.WriteLine($"{report.ProcessName} (PID {report.ProcessId})");
+                
+                Console.ForegroundColor = ConsoleColor.Gray;
+                Console.Write("              Frysduration: ");
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"{report.FreezeDuration.TotalSeconds:F1}s");
+                
+                Console.ForegroundColor = ConsoleColor.Gray;
+                Console.Write("              Trådar: ");
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.WriteLine($"{report.TotalThreads} totalt, {report.RunningThreads} körande");
+                
+                if (report.WaitReasonCounts.Count > 0)
+                {
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    Console.WriteLine("              Vänteorsaker:");
+                    foreach (var kvp in report.WaitReasonCounts.OrderByDescending(x => x.Value))
+                    {
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.Write("                ");
+                        Console.ForegroundColor = kvp.Key == report.DominantWaitReason 
+                            ? ConsoleColor.Yellow 
+                            : ConsoleColor.White;
+                        Console.WriteLine($"{kvp.Key}: {kvp.Value} trådar");
+                    }
+                }
+                
+                if (report.DominantWaitReason != null)
+                {
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    Console.Write("              Dominerande: ");
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine(report.DominantWaitReason);
+                }
+                
+                Console.ForegroundColor = ConsoleColor.Gray;
+                Console.Write("              Trolig grundorsak: ");
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine(report.LikelyRootCause);
+                
+                // MiniDump info
+                if (report.MiniDumpPath != null)
+                {
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    Console.Write("              MiniDump: ");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine(Path.GetFileName(report.MiniDumpPath));
+                    
+                    if (report.MiniDumpAnalysis != null)
+                    {
+                        var analysis = report.MiniDumpAnalysis;
+                        if (analysis.FaultingModule != null)
+                        {
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.WriteLine($"                - {analysis.FaultingModule}");
+                        }
+                        if (analysis.ExceptionCode != null)
+                        {
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.WriteLine($"                - Exception: {analysis.ExceptionCode}");
+                        }
+                    }
+                }
+                
+                Console.ForegroundColor = ConsoleColor.Magenta;
+                Console.WriteLine("            └──────────────────────────────────────────────────────┘");
+                Console.ResetColor();
+            }
         }
         else
         {
