@@ -60,7 +60,7 @@ public sealed class DriverAnalyzer : IAnalyzer
             }
 
             // Sort by date and get oldest 10
-            var driverList = new List<(string Name, string Version, DateTime? Date, bool IsSigned)>();
+            var driverList = new List<(string Name, string Version, DateTime? Date)>();
 
             foreach (var driver in drivers)
             {
@@ -68,7 +68,6 @@ public sealed class DriverAnalyzer : IAnalyzer
                                  WmiHelper.GetValue<string>(driver, "DriverName") ?? "Okänd";
                 var version = WmiHelper.GetValue<string>(driver, "DriverVersion") ?? "Okänd";
                 var dateStr = WmiHelper.GetValue<string>(driver, "DriverDate");
-                var isSigned = WmiHelper.GetValue<bool>(driver, "IsSigned", true);
 
                 DateTime? date = null;
                 if (dateStr is not null)
@@ -80,7 +79,7 @@ public sealed class DriverAnalyzer : IAnalyzer
                     catch { }
                 }
 
-                driverList.Add((deviceName, version, date, isSigned));
+                driverList.Add((deviceName, version, date));
             }
 
             var oldestDrivers = driverList
@@ -129,7 +128,7 @@ public sealed class DriverAnalyzer : IAnalyzer
                 {
                     var driverDate = ManagementDateTimeConverter.ToDateTime(dateStr);
                     var age = now - driverDate;
-                    var years = age.TotalDays / 365.0;
+                    var years = age.TotalDays / 365.25;
 
                     if (years > 2)
                     {
