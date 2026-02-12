@@ -46,6 +46,7 @@ public sealed class MonitorSampleBuilder
     public int MemoryPressureIndex { get; set; }
     public int SystemLatencyScore { get; set; }
     public FreezeClassification? FreezeInfo { get; set; }
+    public FreezeReport? DeepFreezeReport { get; set; }
 
     public MonitorSample Build() => new(
         Timestamp: Timestamp,
@@ -86,6 +87,7 @@ public sealed class MonitorSampleBuilder
         TdrEventsLast15Min: TdrEventsLast15Min,
         MemoryPressureIndex: MemoryPressureIndex,
         SystemLatencyScore: SystemLatencyScore,
-        FreezeInfo: FreezeInfo
+        FreezeInfo: FreezeInfo,
+        DeepFreezeReport: DeepFreezeReport
     );
 }

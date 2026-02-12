@@ -41,7 +41,8 @@ public sealed record MonitorSample(
     int TdrEventsLast15Min = 0,
     int MemoryPressureIndex = 0,
     int SystemLatencyScore = 0,
-    FreezeClassification? FreezeInfo = null
+    FreezeClassification? FreezeInfo = null,
+    FreezeReport? DeepFreezeReport = null
 );
 
 public sealed record HangingProcessInfo(string Name, double HangSeconds);
