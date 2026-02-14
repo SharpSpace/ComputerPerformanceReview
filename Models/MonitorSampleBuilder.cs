@@ -50,6 +50,10 @@ public sealed class MonitorSampleBuilder
     public List<SysinternalsHandleInfo>? SysinternalsHandleData { get; set; }
     public string? SysinternalsProcDumpPath { get; set; }
     public List<SysinternalsPoolAllocation>? SysinternalsPoolData { get; set; }
+    public List<DiskSpaceInfo>? DiskSpaces { get; set; }
+    public string? ActivePowerPlan { get; set; }
+    public int BrowserProcessCount { get; set; }
+    public long BrowserMemoryBytes { get; set; }
 
     public MonitorSample Build() => new(
         Timestamp: Timestamp,
@@ -94,6 +98,10 @@ public sealed class MonitorSampleBuilder
         DeepFreezeReport: DeepFreezeReport,
         SysinternalsHandleData: SysinternalsHandleData,
         SysinternalsProcDumpPath: SysinternalsProcDumpPath,
-        SysinternalsPoolData: SysinternalsPoolData
+        SysinternalsPoolData: SysinternalsPoolData,
+        DiskSpaces: DiskSpaces,
+        ActivePowerPlan: ActivePowerPlan,
+        BrowserProcessCount: BrowserProcessCount,
+        BrowserMemoryBytes: BrowserMemoryBytes
     );
 }

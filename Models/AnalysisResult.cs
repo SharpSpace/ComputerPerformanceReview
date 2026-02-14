@@ -5,5 +5,6 @@ public sealed record AnalysisResult(
     string CheckName,
     string Description,
     Severity Severity,
-    string? Recommendation = null
+    string? Recommendation = null,
+    List<ActionStep>? ActionSteps = null
 );
