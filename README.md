@@ -4,6 +4,33 @@ En Windows-konsolapplikation som undersöker varför en dator blir seg, hänger 
 
 ## Funktioner
 
+### Sysinternals-integration
+
+Programmet integrerar automatiskt med **Microsoft Sysinternals Tools** för djupare diagnostik:
+
+| Verktyg | När det körs | Syfte |
+|---------|--------------|-------|
+| **Handle.exe** | Var 30:e sekund på processer med >1000 handles | Identifierar typ av handles (File, Mutex, etc.) vid handle-läckor |
+| **PoolMon.exe** | När kernel nonpaged pool >200 MB | Identifierar vilken drivrutin som läcker kernel-minne |
+| **ProcDump.exe** | När process hänger sig | Skapar minnesdump för offline-analys |
+
+**Verktyg laddas ner automatiskt från Microsoft vid behov.** De sparas i `%LocalAppData%\ComputerPerformanceReview\Sysinternals\`.
+
+#### Handle-analys
+När programmet upptäcker en handle-läcka (>1000 nya handles på 3 sek) körs Handle.exe automatiskt och ger en breakdown av handletyper:
+```
+Handle-läcka: chrome +2400 handles (nu: 8234) Topp-typer: File: 1850, Event: 320, Key: 180
+```
+
+#### Kernel Pool-analys
+Vid hög kernel pool-användning (>200 MB nonpaged) körs PoolMon.exe för att identifiera läckande drivrutiner:
+```
+Kernel pool: Nonpaged pool är 245 MB Topp pool-taggar: NdiS (98 MB), Ntfs (42 MB), TcpE (31 MB)
+```
+
+#### ProcDump vid hängningar
+När en process slutar svara skapas en memory dump automatiskt i `%LocalAppData%\ComputerPerformanceReview\Sysinternals\Dumps\` för vidare analys med WinDbg eller Visual Studio.
+
 ### Två lägen
 
 | Läge | Beskrivning |
@@ -35,6 +62,8 @@ Dashboarden visar i realtid:
   Topp RAM: chrome (2.1 GB), Teams (890 MB), explorer (210 MB)
   Topp I/O: System (1.2 GB), chrome (340 MB), svchost (120 MB)
   Värst disk: 0 C: D: (R 0.2ms, W 0.1ms, kö 0.1, busy 3%)
+  Handle: chrome (4523 total, topp: File 2341)
+  Pool:   NdiS (45 MB), Ntfs (23 MB), TcpE (18 MB)
 
   Hängande: Inga
 ```
@@ -167,7 +196,8 @@ Program.cs                      ← Startmeny, lägesval
 │   ├── LogHelper.cs                ← JSON-sparning och historik
 │   ├── WmiHelper.cs                ← WMI-queries
 │   ├── NativeMethods.cs            ← P/Invoke (GetGuiResources)
-│   └── ProcessExtensions.cs        ← I/O counters, page faults via NtQueryInformationProcess
+│   ├── ProcessExtensions.cs        ← I/O counters, page faults via NtQueryInformationProcess
+│   └── SysinternalsHelper.cs       ← Laddar ner och kör Sysinternals-verktyg
 │
 ├── Interfaces/
 │   ├── IAnalyzer.cs                ← Snabbanalys-interface
