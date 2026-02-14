@@ -216,6 +216,33 @@ public static class MonitorDisplay
             Console.WriteLine(gdiStr);
         }
 
+        // Sysinternals Handle.exe data
+        if (sample.SysinternalsHandleData is { Count: > 0 })
+        {
+            Console.Write("  ");
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.Write("Handle: ");
+            Console.ResetColor();
+            var handleStr = string.Join(", ", sample.SysinternalsHandleData.Take(2).Select(h =>
+            {
+                var topType = h.HandleTypeBreakdown.OrderByDescending(kvp => kvp.Value).FirstOrDefault();
+                return $"{h.ProcessName} ({h.TotalHandles} total, topp: {topType.Key} {topType.Value})";
+            }));
+            Console.WriteLine(handleStr);
+        }
+
+        // Sysinternals PoolMon data
+        if (sample.SysinternalsPoolData is { Count: > 0 })
+        {
+            Console.Write("  ");
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.Write("Pool:   ");
+            Console.ResetColor();
+            var poolStr = string.Join(", ", sample.SysinternalsPoolData.Take(3).Select(p =>
+                $"{p.Tag} ({ConsoleHelper.FormatBytes(p.Bytes)})"));
+            Console.WriteLine(poolStr);
+        }
+
         // Hanging processes with live duration + freeze classification
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.Gray;

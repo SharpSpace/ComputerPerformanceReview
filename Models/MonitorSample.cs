@@ -42,7 +42,10 @@ public sealed record MonitorSample(
     int MemoryPressureIndex = 0,
     int SystemLatencyScore = 0,
     FreezeClassification? FreezeInfo = null,
-    FreezeReport? DeepFreezeReport = null
+    FreezeReport? DeepFreezeReport = null,
+    List<SysinternalsHandleInfo>? SysinternalsHandleData = null,
+    string? SysinternalsProcDumpPath = null,
+    List<SysinternalsPoolAllocation>? SysinternalsPoolData = null
 );
 
 public sealed record HangingProcessInfo(string Name, double HangSeconds);
@@ -61,6 +64,25 @@ public sealed record MonitorProcessInfo(
 public sealed record MonitorIoProcessInfo(string Name, int Pid, ulong ReadBytes, ulong WriteBytes, ulong TotalBytes);
 public sealed record MonitorFaultProcessInfo(string Name, int Pid, double PageFaultsPerSec);
 public sealed record DiskInstanceStat(string Name, double QueueLength, double ReadLatencyMs, double WriteLatencyMs, double BusyPercent);
+
+/// <summary>
+/// Sysinternals Handle.exe data for a process
+/// </summary>
+public sealed record SysinternalsHandleInfo(
+    int ProcessId,
+    string ProcessName,
+    int TotalHandles,
+    Dictionary<string, int> HandleTypeBreakdown
+);
+
+/// <summary>
+/// Sysinternals PoolMon.exe data for kernel pool allocations
+/// </summary>
+public sealed record SysinternalsPoolAllocation(
+    string Tag,
+    string Type,
+    long Bytes
+);
 
 public sealed record MonitorEvent(
     DateTime Timestamp,
