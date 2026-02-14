@@ -6,16 +6,6 @@ public sealed class StartupAnalyzer : IAnalyzer
 {
     public string Name => "Startprogramanalys";
 
-    // Known bloatware/unnecessary startup patterns
-    private static readonly string[] UnnecessaryStartupPatterns = 
-    {
-        "Adobe", "Java", "QuickTime", "iTunes", "Spotify", 
-        "Discord", "Steam", "Origin", "Epic", "Battle.net",
-        "OneDrive", "Dropbox", "Google Drive", "Backup",
-        "CCleaner", "WinZip", "WinRAR", "Skype",
-        "Teams", "Zoom", "McAfee", "Norton", "Avast", "AVG"
-    };
-
     public Task<AnalysisReport> AnalyzeAsync()
     {
         var results = new List<AnalysisResult>();
@@ -57,7 +47,7 @@ public sealed class StartupAnalyzer : IAnalyzer
 
         // Check for potentially unnecessary startup items
         var unnecessary = unique
-            .Where(item => UnnecessaryStartupPatterns.Any(pattern =>
+            .Where(item => BloatwarePatterns.CommonStartupBloatware.Any(pattern =>
                 item.Name.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 

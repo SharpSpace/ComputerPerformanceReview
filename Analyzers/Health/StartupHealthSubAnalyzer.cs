@@ -13,15 +13,6 @@ public sealed class StartupHealthSubAnalyzer : IHealthSubAnalyzer
     private DateTime _lastStartupCheck = DateTime.MinValue;
     private int _cachedStartupCount;
 
-    // Known bloatware patterns
-    private static readonly string[] BloatwarePatterns = 
-    {
-        "mcafee", "norton", "avast", "avg", "ccleaner", "utorrent",
-        "java update", "adobe updater", "quicktime", "realtimes", 
-        "spotify web helper", "skype", "itunes helper", "steam", 
-        "origin", "epic games", "discord", "teams", "onedrive"
-    };
-
     public void Collect(MonitorSampleBuilder builder)
     {
         // Only collect startup info periodically to avoid overhead

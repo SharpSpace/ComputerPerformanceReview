@@ -91,7 +91,7 @@ public sealed class BrowserHealthSubAnalyzer : IHealthSubAnalyzer
                     $"1) Stäng oanvända flikar: Ctrl+W för att stänga aktuell flik. " +
                     $"2) Använd 'Tab Suspender' eller 'The Great Suspender' extension för att automatiskt avlasta inaktiva flikar. " +
                     $"3) Inaktivera tunga extensioner: chrome://extensions eller edge://extensions → Stäng av oanvända. " +
-                    $"4) Använd 'Shift+Esc' i Chrome/Edge för att se Task Manager och identifiera tunga flikar. " +
+                    $"4) Använd 'Shift+Esc' i Chrome/Edge för att se Aktivitetshanteraren och identifiera tunga flikar. " +
                     $"5) Överväg att använda flera webbläsarprofiler för att separera arbete/privat."));
             }
         }
