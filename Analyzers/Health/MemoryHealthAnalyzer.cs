@@ -18,6 +18,7 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
     private DateTime _lastPoolMonRun = DateTime.MinValue;
     private const int PoolMonCooldownSeconds = 120; // Run PoolMon at most every 2 minutes
     private List<SysinternalsPoolAllocation>? _cachedPoolData;
+    private Task? _poolMonTask; // Track running PoolMon task
 
     // Cooldown — max 1 event per typ per 60 sek
     private const int CooldownSeconds = 60;
@@ -64,8 +65,10 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
                 {
                     _lastPoolMonRun = DateTime.Now;
                     
-                    // Fire and forget - results will be available in next iteration
-                    _ = Task.Run(async () =>
+                    // Start background task to collect pool data. Results will be available in next iteration.
+                    // This is intentionally fire-and-forget to avoid blocking monitoring.
+                    // Any exceptions are caught and ignored within the task.
+                    _poolMonTask = Task.Run(async () =>
                     {
                         try
                         {

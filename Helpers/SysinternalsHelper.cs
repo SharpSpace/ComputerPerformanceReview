@@ -97,7 +97,6 @@ public static class SysinternalsHelper
             await using var fs = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None);
             await response.Content.CopyToAsync(fs);
             await fs.FlushAsync();
-            fs.Close();
 
             // Extract the zip file
             System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, ToolsDirectory, overwriteFiles: true);
@@ -255,8 +254,9 @@ public static class SysinternalsHelper
             // For now, return basic info that it's available
             return new RamMapInfo(File.Exists(toolPath));
         }
-        catch
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception || ex is UnauthorizedAccessException || ex is IOException)
         {
+            // Expected exceptions when accessing file system
             return null;
         }
     }
@@ -320,8 +320,9 @@ public static class SysinternalsHelper
 
             return ParsePoolMonOutput(output);
         }
-        catch
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception || ex is UnauthorizedAccessException || ex is InvalidOperationException)
         {
+            // Expected exceptions when tool isn't available, requires admin privileges, or process issues
             return null;
         }
     }

@@ -14,6 +14,7 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
     private DateTime _lastSysinternalsRun = DateTime.MinValue;
     private const int SysinternalsIntervalSeconds = 30; // Run Handle.exe every 30 seconds
     private List<SysinternalsHandleInfo>? _cachedHandleData;
+    private Task? _handleExeTask; // Track running Handle.exe task
 
     // GDI
     private const int GdiWarningThreshold = 5000;
@@ -187,8 +188,10 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
 
             if (highHandleProcs.Count > 0)
             {
-                // Fire and forget - results will be available in next iteration
-                _ = Task.Run(async () =>
+                // Start background task to collect handle data. Results will be available in next iteration.
+                // This is intentionally fire-and-forget to avoid blocking monitoring.
+                // Any exceptions are caught and ignored within the task.
+                _handleExeTask = Task.Run(async () =>
                 {
                     try
                     {
