@@ -6,6 +6,16 @@ public sealed class StartupAnalyzer : IAnalyzer
 {
     public string Name => "Startprogramanalys";
 
+    // Known bloatware/unnecessary startup patterns
+    private static readonly string[] UnnecessaryStartupPatterns = 
+    {
+        "Adobe", "Java", "QuickTime", "iTunes", "Spotify", 
+        "Discord", "Steam", "Origin", "Epic", "Battle.net",
+        "OneDrive", "Dropbox", "Google Drive", "Backup",
+        "CCleaner", "WinZip", "WinRAR", "Skype",
+        "Teams", "Zoom", "McAfee", "Norton", "Avast", "AVG"
+    };
+
     public Task<AnalysisReport> AnalyzeAsync()
     {
         var results = new List<AnalysisResult>();
@@ -36,19 +46,67 @@ public sealed class StartupAnalyzer : IAnalyzer
             severity,
             severity != Severity.Ok
                 ? "Minska antalet startprogram via Aktivitetshanteraren (Ctrl+Shift+Esc → Autostart)"
-                : null));
+                : null,
+            severity != Severity.Ok ? new List<ActionStep>
+            {
+                new("Öppna Aktivitetshanteraren: Ctrl+Shift+Esc", null, "Lätt"),
+                new("Gå till fliken 'Autostart'", null, "Lätt"),
+                new("Högerklicka på program du inte behöver → Inaktivera", null, "Lätt"),
+                new("Fokusera på uppdaterare, launchers och moln-sync", null, "Medel")
+            } : null));
 
-        foreach (var item in unique.Take(20))
+        // Check for potentially unnecessary startup items
+        var unnecessary = unique
+            .Where(item => UnnecessaryStartupPatterns.Any(pattern =>
+                item.Name.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        if (unnecessary.Count > 0)
         {
-            results.Add(new AnalysisResult("Startprogram", item.Name,
-                $"{item.Name} ({item.Location}): {TruncatePath(item.Command, 60)}",
-                Severity.Ok));
+            results.Add(new AnalysisResult(
+                "Startprogram",
+                "Potentiellt onödiga program",
+                $"{unnecessary.Count} program som ofta inte behöver starta automatiskt",
+                unnecessary.Count > 5 ? Severity.Warning : Severity.Ok,
+                "Dessa program kan vanligen inaktiveras från autostart utan problem. " +
+                "Du kan starta dem manuellt när du behöver dem."));
+
+            foreach (var item in unnecessary.Take(10))
+            {
+                results.Add(new AnalysisResult("Startprogram", item.Name,
+                    $"[Kan inaktiveras] {item.Name} ({item.Location})",
+                    Severity.Ok));
+            }
+
+            if (unnecessary.Count > 10)
+            {
+                results.Add(new AnalysisResult("Startprogram", "Fler",
+                    $"... och {unnecessary.Count - 10} till som kan granskas", Severity.Ok));
+            }
         }
 
-        if (unique.Count > 20)
+        // List remaining essential startup items
+        var essential = unique.Except(unnecessary).ToList();
+        if (essential.Count > 0)
         {
-            results.Add(new AnalysisResult("Startprogram", "Fler",
-                $"... och {unique.Count - 20} till", Severity.Ok));
+            results.Add(new AnalysisResult(
+                "Startprogram",
+                "Övriga startprogram",
+                $"{essential.Count} andra startprogram (kan inkludera systemkritiska)",
+                Severity.Ok));
+
+            foreach (var item in essential.Take(10))
+            {
+                results.Add(new AnalysisResult("Startprogram", item.Name,
+                    $"{item.Name} ({item.Location}): {TruncatePath(item.Command, 60)}",
+                    Severity.Ok));
+            }
+
+            if (essential.Count > 10)
+            {
+                results.Add(new AnalysisResult("Startprogram", "Fler",
+                    $"... och {essential.Count - 10} till", Severity.Ok));
+            }
         }
 
         return Task.FromResult(new AnalysisReport("STARTPROGRAM", results));

@@ -199,7 +199,9 @@ static async Task RunSnapshotMode()
         new CpuAnalyzer(),
         new NetworkAnalyzer(),
         new GpuAnalyzer(),
-        new DriverAnalyzer()
+        new DriverAnalyzer(),
+        new PowerPlanAnalyzer(),
+        new InstalledProgramsAnalyzer()
     };
 
     var reports = new List<AnalysisReport>();
