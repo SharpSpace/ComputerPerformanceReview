@@ -58,7 +58,7 @@ public sealed class PowerPlanAnalyzer : IAnalyzer
                 "Byt till 'Balanserad' eller 'Hög prestanda' för bättre respons.",
                 new List<ActionStep>
                 {
-                    new("Sök efter 'Energischema' i Start-menyn"),
+                    new("Sök efter 'Energischema' i Start-menyn", null, "Lätt"),
                     new("Välj 'Balanserad' eller 'Hög prestanda'", null, "Lätt"),
                     new("Alternativ: Kör 'powercfg.exe /setactive SCHEME_BALANCED' som admin", 
                         "powercfg.exe /setactive SCHEME_BALANCED", "Medel")
