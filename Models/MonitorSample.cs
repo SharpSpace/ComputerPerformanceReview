@@ -45,7 +45,10 @@ public sealed record MonitorSample(
     FreezeReport? DeepFreezeReport = null,
     List<SysinternalsHandleInfo>? SysinternalsHandleData = null,
     string? SysinternalsProcDumpPath = null,
-    List<SysinternalsPoolAllocation>? SysinternalsPoolData = null
+    List<SysinternalsPoolAllocation>? SysinternalsPoolData = null,
+    string? SysinternalsDiskExtOutput = null,
+    bool? SysinternalsRamMapAvailable = null,
+    MiniDumpAnalysis? SysinternalsProcDumpAnalysis = null
 );
 
 public sealed record HangingProcessInfo(string Name, double HangSeconds);

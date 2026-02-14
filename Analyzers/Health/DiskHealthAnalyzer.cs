@@ -18,6 +18,12 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
     private DateTime _lastStoragePoll = DateTime.MinValue;
     private int _cachedStorageErrors;
 
+    // Sysinternals DiskExt integration
+    private DateTime _lastDiskExtRun = DateTime.MinValue;
+    private const int DiskExtCooldownSeconds = 120; // Run DiskExt at most every 2 minutes
+    private string? _cachedDiskExtOutput;
+    private Task? _diskExtTask; // Track running DiskExt task
+
     public void Collect(MonitorSampleBuilder builder)
     {
         try
@@ -61,6 +67,30 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
         }
 
         builder.StorageErrorsLast15Min = _cachedStorageErrors;
+
+        if (!string.IsNullOrWhiteSpace(_cachedDiskExtOutput))
+            builder.SysinternalsDiskExtOutput = _cachedDiskExtOutput;
+
+        double maxLatencyMs = Math.Max(builder.AvgDiskSecRead, builder.AvgDiskSecWrite) * 1000;
+        bool shouldRunDiskExt = builder.DiskQueueLength > DiskQueueThreshold
+            || maxLatencyMs > DiskLatencyWarningMs
+            || builder.StorageErrorsLast15Min > 0;
+
+        if (shouldRunDiskExt && (DateTime.Now - _lastDiskExtRun).TotalSeconds >= DiskExtCooldownSeconds)
+        {
+            _lastDiskExtRun = DateTime.Now;
+            _diskExtTask = Task.Run(async () =>
+            {
+                try
+                {
+                    var output = await SysinternalsHelper.RunDiskExtAsync();
+                    var summary = SummarizeDiskExtOutput(output);
+                    if (!string.IsNullOrWhiteSpace(summary))
+                        _cachedDiskExtOutput = summary;
+                }
+                catch { /* Ignore Sysinternals failures - not critical */ }
+            });
+        }
     }
 
     public HealthAssessment Analyze(MonitorSample current, IReadOnlyList<MonitorSample> history)
@@ -137,6 +167,21 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
             : null;
 
         return new HealthAssessment(new HealthScore(Domain, healthScore, confidence, hint), events);
+    }
+
+    private static string? SummarizeDiskExtOutput(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return null;
+
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length > 0)
+                return trimmed;
+        }
+
+        return null;
     }
 
     private static string GetTopIoHint(MonitorSample sample)

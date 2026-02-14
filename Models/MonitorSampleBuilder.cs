@@ -50,6 +50,9 @@ public sealed class MonitorSampleBuilder
     public List<SysinternalsHandleInfo>? SysinternalsHandleData { get; set; }
     public string? SysinternalsProcDumpPath { get; set; }
     public List<SysinternalsPoolAllocation>? SysinternalsPoolData { get; set; }
+    public string? SysinternalsDiskExtOutput { get; set; }
+    public bool? SysinternalsRamMapAvailable { get; set; }
+    public MiniDumpAnalysis? SysinternalsProcDumpAnalysis { get; set; }
 
     public MonitorSample Build() => new(
         Timestamp: Timestamp,
@@ -94,6 +97,9 @@ public sealed class MonitorSampleBuilder
         DeepFreezeReport: DeepFreezeReport,
         SysinternalsHandleData: SysinternalsHandleData,
         SysinternalsProcDumpPath: SysinternalsProcDumpPath,
-        SysinternalsPoolData: SysinternalsPoolData
+        SysinternalsPoolData: SysinternalsPoolData,
+        SysinternalsDiskExtOutput: SysinternalsDiskExtOutput,
+        SysinternalsRamMapAvailable: SysinternalsRamMapAvailable,
+        SysinternalsProcDumpAnalysis: SysinternalsProcDumpAnalysis
     );
 }
