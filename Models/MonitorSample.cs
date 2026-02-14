@@ -44,7 +44,8 @@ public sealed record MonitorSample(
     FreezeClassification? FreezeInfo = null,
     FreezeReport? DeepFreezeReport = null,
     List<SysinternalsHandleInfo>? SysinternalsHandleData = null,
-    string? SysinternalsProcDumpPath = null
+    string? SysinternalsProcDumpPath = null,
+    List<SysinternalsPoolAllocation>? SysinternalsPoolData = null
 );
 
 public sealed record HangingProcessInfo(string Name, double HangSeconds);
@@ -72,6 +73,15 @@ public sealed record SysinternalsHandleInfo(
     string ProcessName,
     int TotalHandles,
     Dictionary<string, int> HandleTypeBreakdown
+);
+
+/// <summary>
+/// Sysinternals PoolMon.exe data for kernel pool allocations
+/// </summary>
+public sealed record SysinternalsPoolAllocation(
+    string Tag,
+    string Type,
+    long Bytes
 );
 
 public sealed record MonitorEvent(

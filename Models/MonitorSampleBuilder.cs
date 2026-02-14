@@ -49,6 +49,7 @@ public sealed class MonitorSampleBuilder
     public FreezeReport? DeepFreezeReport { get; set; }
     public List<SysinternalsHandleInfo>? SysinternalsHandleData { get; set; }
     public string? SysinternalsProcDumpPath { get; set; }
+    public List<SysinternalsPoolAllocation>? SysinternalsPoolData { get; set; }
 
     public MonitorSample Build() => new(
         Timestamp: Timestamp,
@@ -92,6 +93,7 @@ public sealed class MonitorSampleBuilder
         FreezeInfo: FreezeInfo,
         DeepFreezeReport: DeepFreezeReport,
         SysinternalsHandleData: SysinternalsHandleData,
-        SysinternalsProcDumpPath: SysinternalsProcDumpPath
+        SysinternalsProcDumpPath: SysinternalsProcDumpPath,
+        SysinternalsPoolData: SysinternalsPoolData
     );
 }

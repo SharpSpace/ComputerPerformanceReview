@@ -275,6 +275,98 @@ public static class SysinternalsHelper
 
         return statuses;
     }
+
+    /// <summary>
+    /// Executes PoolMon to analyze kernel pool usage
+    /// Note: Requires administrative privileges
+    /// </summary>
+    public static async Task<PoolMonInfo?> RunPoolMonAsync()
+    {
+        var toolPath = await GetToolPathAsync("poolmon");
+        if (toolPath == null)
+            return null;
+
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = toolPath,
+                Arguments = "/c /b /n 1",  // Capture, batch mode, single iteration
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(startInfo);
+            if (process == null)
+                return null;
+
+            var output = await process.StandardOutput.ReadToEndAsync();
+            
+            // Wait up to 10 seconds
+            var completed = await Task.Run(() => process.WaitForExit(10000));
+            
+            if (!completed)
+            {
+                try { process.Kill(); } catch { }
+                return null;
+            }
+
+            if (process.ExitCode != 0)
+                return null;
+
+            return ParsePoolMonOutput(output);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses PoolMon output to extract top pool allocators
+    /// </summary>
+    private static PoolMonInfo ParsePoolMonOutput(string output)
+    {
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var topAllocations = new List<PoolAllocation>();
+        
+        // PoolMon output format (skip header lines):
+        // Tag  Type    Allocs     Frees    Diff   Bytes       Per Alloc
+        bool inDataSection = false;
+        
+        foreach (var line in lines)
+        {
+            if (line.Contains("Tag") && line.Contains("Type") && line.Contains("Allocs"))
+            {
+                inDataSection = true;
+                continue;
+            }
+            
+            if (!inDataSection || string.IsNullOrWhiteSpace(line))
+                continue;
+
+            var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 7)
+                continue;
+
+            try
+            {
+                var tag = parts[0];
+                var type = parts[1];
+                if (!long.TryParse(parts[5], out var bytes))
+                    continue;
+
+                topAllocations.Add(new PoolAllocation(tag, type, bytes));
+            }
+            catch { }
+        }
+
+        return new PoolMonInfo(
+            topAllocations.OrderByDescending(a => a.Bytes).Take(10).ToList()
+        );
+    }
 }
 
 /// <summary>
@@ -313,4 +405,20 @@ public record ToolStatus(
     string Description,
     bool IsInstalled,
     string Path
+);
+
+/// <summary>
+/// PoolMon analysis results
+/// </summary>
+public record PoolMonInfo(
+    List<PoolAllocation> TopAllocations
+);
+
+/// <summary>
+/// Individual pool allocation entry
+/// </summary>
+public record PoolAllocation(
+    string Tag,
+    string Type,
+    long Bytes
 );

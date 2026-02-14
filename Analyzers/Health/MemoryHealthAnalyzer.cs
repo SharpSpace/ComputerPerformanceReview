@@ -13,6 +13,10 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
     private const double CommitExhaustionCritical = 0.95;
     private const long PoolNonpagedWarning = 200L * 1024 * 1024;  // 200 MB
     private const long PoolNonpagedCritical = 400L * 1024 * 1024;  // 400 MB
+    
+    // Sysinternals PoolMon integration
+    private DateTime _lastPoolMonRun = DateTime.MinValue;
+    private const int PoolMonCooldownSeconds = 120; // Run PoolMon at most every 2 minutes
 
     // Cooldown — max 1 event per typ per 60 sek
     private const int CooldownSeconds = 60;
@@ -46,6 +50,24 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
                 builder.AvailableMBytes = WmiHelper.GetValue<long>(data[0], "AvailableMBytes");
                 builder.PoolNonpagedBytes = WmiHelper.GetValue<long>(data[0], "PoolNonpagedBytes");
                 builder.PoolPagedBytes = WmiHelper.GetValue<long>(data[0], "PoolPagedBytes");
+                
+                // Run PoolMon if kernel pool is high and cooldown has expired
+                if (builder.PoolNonpagedBytes > PoolNonpagedWarning 
+                    && (DateTime.Now - _lastPoolMonRun).TotalSeconds >= PoolMonCooldownSeconds)
+                {
+                    _lastPoolMonRun = DateTime.Now;
+                    try
+                    {
+                        var poolMonInfo = SysinternalsHelper.RunPoolMonAsync().Result;
+                        if (poolMonInfo != null && poolMonInfo.TopAllocations.Count > 0)
+                        {
+                            builder.SysinternalsPoolData = poolMonInfo.TopAllocations
+                                .Select(p => new SysinternalsPoolAllocation(p.Tag, p.Type, p.Bytes))
+                                .ToList();
+                        }
+                    }
+                    catch { }
+                }
             }
         }
         catch { }
@@ -174,9 +196,29 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
                 _lastPoolExhaustionTime = DateTime.Now;
                 bool isCritical = current.PoolNonpagedBytes > PoolNonpagedCritical;
                 healthScore -= isCritical ? 20 : 10;
+                
+                // Try to get PoolMon data to identify the driver causing the leak
+                string driverHint = "";
+                if ((DateTime.Now - _lastPoolMonRun).TotalSeconds >= PoolMonCooldownSeconds)
+                {
+                    _lastPoolMonRun = DateTime.Now;
+                    try
+                    {
+                        var poolMonInfo = SysinternalsHelper.RunPoolMonAsync().Result;
+                        if (poolMonInfo != null && poolMonInfo.TopAllocations.Count > 0)
+                        {
+                            var topPool = poolMonInfo.TopAllocations.Take(3)
+                                .Select(p => $"{p.Tag} ({ConsoleHelper.FormatBytes(p.Bytes)})")
+                                .ToList();
+                            driverHint = $" Topp pool-taggar: {string.Join(", ", topPool)}.";
+                        }
+                    }
+                    catch { }
+                }
+                
                 events.Add(new MonitorEvent(
                     DateTime.Now, "PoolExhaustion",
-                    $"Kernel pool: Nonpaged pool är {ConsoleHelper.FormatBytes(current.PoolNonpagedBytes)}",
+                    $"Kernel pool: Nonpaged pool är {ConsoleHelper.FormatBytes(current.PoolNonpagedBytes)}{driverHint}",
                     isCritical ? "Critical" : "Warning",
                     "Kernel nonpaged pool är ovanligt hög. Detta orsakas vanligen av en drivrutin som läcker minne. "
                     + "Verktyg: Kör 'poolmon.exe' (Sysinternals) för att identifiera vilken drivrutin. "
