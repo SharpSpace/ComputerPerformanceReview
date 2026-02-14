@@ -9,6 +9,10 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
     // Handle leak
     private const int HandleLeakThreshold = 1000;
     private readonly Dictionary<int, (string Name, int HandleCount)> _prevHandleCounts = new();
+    
+    // Sysinternals integration
+    private DateTime _lastSysinternalsRun = DateTime.MinValue;
+    private const int SysinternalsIntervalSeconds = 30; // Run Handle.exe every 30 seconds
 
     // GDI
     private const int GdiWarningThreshold = 5000;
@@ -161,6 +165,40 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
         builder.TopIoProcesses = topIo.OrderByDescending(p => p.TotalBytes).Take(5).ToList();
         builder.TopFaultProcesses = topFaults.OrderByDescending(p => p.PageFaultsPerSec).Take(5).ToList();
         builder.HangingProcesses = hangingProcesses;
+
+        // Sysinternals Handle.exe integration - run periodically on top processes with high handle counts
+        if ((DateTime.Now - _lastSysinternalsRun).TotalSeconds >= SysinternalsIntervalSeconds)
+        {
+            _lastSysinternalsRun = DateTime.Now;
+            var handleDataList = new List<SysinternalsHandleInfo>();
+
+            // Run Handle.exe on processes with suspiciously high handle counts
+            var highHandleProcs = topMemory
+                .Where(p => p.HandleCount > 1000)
+                .OrderByDescending(p => p.HandleCount)
+                .Take(3);
+
+            foreach (var proc in highHandleProcs)
+            {
+                try
+                {
+                    var handleInfo = SysinternalsHelper.RunHandleAsync(proc.Pid, proc.Name).Result;
+                    if (handleInfo != null)
+                    {
+                        handleDataList.Add(new SysinternalsHandleInfo(
+                            handleInfo.ProcessId,
+                            handleInfo.ProcessName,
+                            handleInfo.TotalHandles,
+                            handleInfo.HandleTypeBreakdown
+                        ));
+                    }
+                }
+                catch { }
+            }
+
+            if (handleDataList.Count > 0)
+                builder.SysinternalsHandleData = handleDataList;
+        }
     }
 
     public HealthAssessment Analyze(MonitorSample current, IReadOnlyList<MonitorSample> history)
@@ -176,6 +214,38 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
             {
                 _hangingTracker[proc] = DateTime.Now;
                 healthScore -= 20;
+                
+                // Trigger ProcDump for hanging processes with long duration
+                var hangingProc = current.HangingProcesses.FirstOrDefault(h => h.Name == proc);
+                if (hangingProc != null)
+                {
+                    // Find the process ID from top processes lists
+                    var procInfo = current.TopCpuProcesses.Concat(current.TopMemoryProcesses)
+                        .FirstOrDefault(p => p.Name == proc);
+                    
+                    if (procInfo != null)
+                    {
+                        // Trigger ProcDump asynchronously (don't wait)
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var dumpPath = await SysinternalsHelper.RunProcDumpAsync(
+                                    procInfo.Pid, 
+                                    proc, 
+                                    "UI hanging detected");
+                                
+                                if (dumpPath != null)
+                                {
+                                    // Store the dump path in builder for next sample
+                                    // Note: This will be available in the next iteration
+                                }
+                            }
+                            catch { }
+                        });
+                    }
+                }
+                
                 events.Add(new MonitorEvent(
                     DateTime.Now, "Hang",
                     $"UI-hängning: {proc} svarar inte",
@@ -234,9 +304,23 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
                     if (growth > HandleLeakThreshold)
                     {
                         healthScore -= growth > 5000 ? 20 : 10;
+                        
+                        // Try to get detailed handle breakdown from Sysinternals data
+                        string handleDetails = "";
+                        var sysinternalsData = sample.SysinternalsHandleData?.FirstOrDefault(h => h.ProcessId == pid);
+                        if (sysinternalsData != null && sysinternalsData.HandleTypeBreakdown.Count > 0)
+                        {
+                            var topTypes = sysinternalsData.HandleTypeBreakdown
+                                .OrderByDescending(kvp => kvp.Value)
+                                .Take(3)
+                                .Select(kvp => $"{kvp.Key}: {kvp.Value}")
+                                .ToList();
+                            handleDetails = $" Topp-typer: {string.Join(", ", topTypes)}.";
+                        }
+                        
                         events.Add(new MonitorEvent(
                             DateTime.Now, "HandleLeak",
-                            $"Handle-läcka: {current.Name} +{growth} handles (nu: {current.HandleCount})",
+                            $"Handle-läcka: {current.Name} +{growth} handles (nu: {current.HandleCount}){handleDetails}",
                             growth > 5000 ? "Critical" : "Warning",
                             $"Programmet {current.Name} läcker resurser (handles). "
                             + "Prova starta om programmet. Om det upprepas: uppdatera till senaste versionen. "

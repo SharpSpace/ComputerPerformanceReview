@@ -47,6 +47,8 @@ public sealed class MonitorSampleBuilder
     public int SystemLatencyScore { get; set; }
     public FreezeClassification? FreezeInfo { get; set; }
     public FreezeReport? DeepFreezeReport { get; set; }
+    public List<SysinternalsHandleInfo>? SysinternalsHandleData { get; set; }
+    public string? SysinternalsProcDumpPath { get; set; }
 
     public MonitorSample Build() => new(
         Timestamp: Timestamp,
@@ -88,6 +90,8 @@ public sealed class MonitorSampleBuilder
         MemoryPressureIndex: MemoryPressureIndex,
         SystemLatencyScore: SystemLatencyScore,
         FreezeInfo: FreezeInfo,
-        DeepFreezeReport: DeepFreezeReport
+        DeepFreezeReport: DeepFreezeReport,
+        SysinternalsHandleData: SysinternalsHandleData,
+        SysinternalsProcDumpPath: SysinternalsProcDumpPath
     );
 }
