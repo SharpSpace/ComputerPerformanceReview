@@ -145,8 +145,9 @@ public static class SysinternalsHelper
 
             return ParseHandleOutput(output, processId, processName);
         }
-        catch
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception || ex is UnauthorizedAccessException)
         {
+            // Expected exceptions when tool isn't available or access is denied
             return null;
         }
     }
@@ -232,8 +233,9 @@ public static class SysinternalsHelper
 
             return File.Exists(dumpPath) ? dumpPath : null;
         }
-        catch
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception || ex is UnauthorizedAccessException || ex is InvalidOperationException)
         {
+            // Expected exceptions when tool isn't available, access is denied, or process already exited
             return null;
         }
     }

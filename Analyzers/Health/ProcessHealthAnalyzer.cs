@@ -13,6 +13,7 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
     // Sysinternals integration
     private DateTime _lastSysinternalsRun = DateTime.MinValue;
     private const int SysinternalsIntervalSeconds = 30; // Run Handle.exe every 30 seconds
+    private List<SysinternalsHandleInfo>? _cachedHandleData;
 
     // GDI
     private const int GdiWarningThreshold = 5000;
@@ -166,38 +167,57 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
         builder.TopFaultProcesses = topFaults.OrderByDescending(p => p.PageFaultsPerSec).Take(5).ToList();
         builder.HangingProcesses = hangingProcesses;
 
-        // Sysinternals Handle.exe integration - run periodically on top processes with high handle counts
+        // Use cached data from previous async run
+        if (_cachedHandleData != null && _cachedHandleData.Count > 0)
+        {
+            builder.SysinternalsHandleData = _cachedHandleData;
+        }
+
+        // Sysinternals Handle.exe integration - run asynchronously without blocking
         if ((DateTime.Now - _lastSysinternalsRun).TotalSeconds >= SysinternalsIntervalSeconds)
         {
             _lastSysinternalsRun = DateTime.Now;
-            var handleDataList = new List<SysinternalsHandleInfo>();
 
-            // Run Handle.exe on processes with suspiciously high handle counts
+            // Run processes with suspiciously high handle counts
             var highHandleProcs = topMemory
                 .Where(p => p.HandleCount > 1000)
                 .OrderByDescending(p => p.HandleCount)
-                .Take(3);
+                .Take(3)
+                .ToList();
 
-            foreach (var proc in highHandleProcs)
+            if (highHandleProcs.Count > 0)
             {
-                try
+                // Fire and forget - results will be available in next iteration
+                _ = Task.Run(async () =>
                 {
-                    var handleInfo = SysinternalsHelper.RunHandleAsync(proc.Pid, proc.Name).Result;
-                    if (handleInfo != null)
+                    try
                     {
-                        handleDataList.Add(new SysinternalsHandleInfo(
-                            handleInfo.ProcessId,
-                            handleInfo.ProcessName,
-                            handleInfo.TotalHandles,
-                            handleInfo.HandleTypeBreakdown
-                        ));
-                    }
-                }
-                catch { }
-            }
+                        var handleDataList = new List<SysinternalsHandleInfo>();
+                        
+                        foreach (var proc in highHandleProcs)
+                        {
+                            try
+                            {
+                                var handleInfo = await SysinternalsHelper.RunHandleAsync(proc.Pid, proc.Name);
+                                if (handleInfo != null)
+                                {
+                                    handleDataList.Add(new SysinternalsHandleInfo(
+                                        handleInfo.ProcessId,
+                                        handleInfo.ProcessName,
+                                        handleInfo.TotalHandles,
+                                        handleInfo.HandleTypeBreakdown
+                                    ));
+                                }
+                            }
+                            catch { /* Ignore individual process failures */ }
+                        }
 
-            if (handleDataList.Count > 0)
-                builder.SysinternalsHandleData = handleDataList;
+                        if (handleDataList.Count > 0)
+                            _cachedHandleData = handleDataList;
+                    }
+                    catch { /* Ignore Sysinternals failures - not critical */ }
+                });
+            }
         }
     }
 
@@ -215,36 +235,8 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
                 _hangingTracker[proc] = DateTime.Now;
                 healthScore -= 20;
                 
-                // Trigger ProcDump for hanging processes with long duration
-                var hangingProc = current.HangingProcesses.FirstOrDefault(h => h.Name == proc);
-                if (hangingProc != null)
-                {
-                    // Find the process ID from top processes lists
-                    var procInfo = current.TopCpuProcesses.Concat(current.TopMemoryProcesses)
-                        .FirstOrDefault(p => p.Name == proc);
-                    
-                    if (procInfo != null)
-                    {
-                        // Trigger ProcDump asynchronously (don't wait)
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                var dumpPath = await SysinternalsHelper.RunProcDumpAsync(
-                                    procInfo.Pid, 
-                                    proc, 
-                                    "UI hanging detected");
-                                
-                                if (dumpPath != null)
-                                {
-                                    // Store the dump path in builder for next sample
-                                    // Note: This will be available in the next iteration
-                                }
-                            }
-                            catch { }
-                        });
-                    }
-                }
+                // Note: ProcDump is handled separately by FreezeInvestigator which already has
+                // proper dump creation logic. We don't duplicate it here to avoid multiple dumps.
                 
                 events.Add(new MonitorEvent(
                     DateTime.Now, "Hang",

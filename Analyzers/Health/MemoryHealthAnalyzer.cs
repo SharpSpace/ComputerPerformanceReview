@@ -17,6 +17,7 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
     // Sysinternals PoolMon integration
     private DateTime _lastPoolMonRun = DateTime.MinValue;
     private const int PoolMonCooldownSeconds = 120; // Run PoolMon at most every 2 minutes
+    private List<SysinternalsPoolAllocation>? _cachedPoolData;
 
     // Cooldown — max 1 event per typ per 60 sek
     private const int CooldownSeconds = 60;
@@ -51,22 +52,33 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
                 builder.PoolNonpagedBytes = WmiHelper.GetValue<long>(data[0], "PoolNonpagedBytes");
                 builder.PoolPagedBytes = WmiHelper.GetValue<long>(data[0], "PoolPagedBytes");
                 
-                // Run PoolMon if kernel pool is high and cooldown has expired
+                // Use cached data from previous async run
+                if (_cachedPoolData != null && _cachedPoolData.Count > 0)
+                {
+                    builder.SysinternalsPoolData = _cachedPoolData;
+                }
+                
+                // Run PoolMon asynchronously if kernel pool is high and cooldown has expired
                 if (builder.PoolNonpagedBytes > PoolNonpagedWarning 
                     && (DateTime.Now - _lastPoolMonRun).TotalSeconds >= PoolMonCooldownSeconds)
                 {
                     _lastPoolMonRun = DateTime.Now;
-                    try
+                    
+                    // Fire and forget - results will be available in next iteration
+                    _ = Task.Run(async () =>
                     {
-                        var poolMonInfo = SysinternalsHelper.RunPoolMonAsync().Result;
-                        if (poolMonInfo != null && poolMonInfo.TopAllocations.Count > 0)
+                        try
                         {
-                            builder.SysinternalsPoolData = poolMonInfo.TopAllocations
-                                .Select(p => new SysinternalsPoolAllocation(p.Tag, p.Type, p.Bytes))
-                                .ToList();
+                            var poolMonInfo = await SysinternalsHelper.RunPoolMonAsync();
+                            if (poolMonInfo != null && poolMonInfo.TopAllocations.Count > 0)
+                            {
+                                _cachedPoolData = poolMonInfo.TopAllocations
+                                    .Select(p => new SysinternalsPoolAllocation(p.Tag, p.Type, p.Bytes))
+                                    .ToList();
+                            }
                         }
-                    }
-                    catch { }
+                        catch { /* Ignore Sysinternals failures - not critical */ }
+                    });
                 }
             }
         }
@@ -197,23 +209,14 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
                 bool isCritical = current.PoolNonpagedBytes > PoolNonpagedCritical;
                 healthScore -= isCritical ? 20 : 10;
                 
-                // Try to get PoolMon data to identify the driver causing the leak
+                // Try to get PoolMon data from cached results
                 string driverHint = "";
-                if ((DateTime.Now - _lastPoolMonRun).TotalSeconds >= PoolMonCooldownSeconds)
+                if (current.SysinternalsPoolData is { Count: > 0 })
                 {
-                    _lastPoolMonRun = DateTime.Now;
-                    try
-                    {
-                        var poolMonInfo = SysinternalsHelper.RunPoolMonAsync().Result;
-                        if (poolMonInfo != null && poolMonInfo.TopAllocations.Count > 0)
-                        {
-                            var topPool = poolMonInfo.TopAllocations.Take(3)
-                                .Select(p => $"{p.Tag} ({ConsoleHelper.FormatBytes(p.Bytes)})")
-                                .ToList();
-                            driverHint = $" Topp pool-taggar: {string.Join(", ", topPool)}.";
-                        }
-                    }
-                    catch { }
+                    var topPool = current.SysinternalsPoolData.Take(3)
+                        .Select(p => $"{p.Tag} ({ConsoleHelper.FormatBytes(p.Bytes)})")
+                        .ToList();
+                    driverHint = $" Topp pool-taggar: {string.Join(", ", topPool)}.";
                 }
                 
                 events.Add(new MonitorEvent(
