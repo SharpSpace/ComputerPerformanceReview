@@ -105,7 +105,7 @@ public sealed class MonitorSampleBuilder
         DiskSpaces: DiskSpaces,
         ActivePowerPlan: ActivePowerPlan,
         BrowserProcessCount: BrowserProcessCount,
-        BrowserMemoryBytes: BrowserMemoryBytes
+        BrowserMemoryBytes: BrowserMemoryBytes,
         SysinternalsDiskExtOutput: SysinternalsDiskExtOutput,
         SysinternalsRamMapAvailable: SysinternalsRamMapAvailable,
         SysinternalsProcDumpAnalysis: SysinternalsProcDumpAnalysis
