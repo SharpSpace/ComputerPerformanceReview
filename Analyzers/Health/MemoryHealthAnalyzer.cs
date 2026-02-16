@@ -20,6 +20,12 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
     private List<SysinternalsPoolAllocation>? _cachedPoolData;
     private Task? _poolMonTask; // Track running PoolMon task
 
+    // Sysinternals RAMMap integration
+    private DateTime _lastRamMapRun = DateTime.MinValue;
+    private const int RamMapCooldownSeconds = 300; // Run RAMMap at most every 5 minutes
+    private bool? _cachedRamMapAvailable;
+    private Task? _ramMapTask; // Track running RAMMap task
+
     // Cooldown — max 1 event per typ per 60 sek
     private const int CooldownSeconds = 60;
 
@@ -102,6 +108,27 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
             }
         }
         catch { }
+
+        if (_cachedRamMapAvailable.HasValue)
+            builder.SysinternalsRamMapAvailable = _cachedRamMapAvailable;
+
+        bool shouldRunRamMap = builder.MemoryUsedPercent > 85
+            || (builder.CommitLimit > 0 && (double)builder.CommittedBytes / builder.CommitLimit > CommitExhaustionWarning)
+            || builder.PagesInputPerSec > PagesInputStormThreshold;
+
+        if (shouldRunRamMap && (DateTime.Now - _lastRamMapRun).TotalSeconds >= RamMapCooldownSeconds)
+        {
+            _lastRamMapRun = DateTime.Now;
+            _ramMapTask = Task.Run(async () =>
+            {
+                try
+                {
+                    var ramMapInfo = await SysinternalsHelper.RunRamMapAsync();
+                    _cachedRamMapAvailable = ramMapInfo?.IsAvailable;
+                }
+                catch { /* Ignore Sysinternals failures - not critical */ }
+            });
+        }
     }
 
     public HealthAssessment Analyze(MonitorSample current, IReadOnlyList<MonitorSample> history)

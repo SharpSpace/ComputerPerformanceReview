@@ -54,6 +54,9 @@ public sealed class MonitorSampleBuilder
     public string? ActivePowerPlan { get; set; }
     public int BrowserProcessCount { get; set; }
     public long BrowserMemoryBytes { get; set; }
+    public string? SysinternalsDiskExtOutput { get; set; }
+    public bool? SysinternalsRamMapAvailable { get; set; }
+    public MiniDumpAnalysis? SysinternalsProcDumpAnalysis { get; set; }
 
     public MonitorSample Build() => new(
         Timestamp: Timestamp,
@@ -103,5 +106,8 @@ public sealed class MonitorSampleBuilder
         ActivePowerPlan: ActivePowerPlan,
         BrowserProcessCount: BrowserProcessCount,
         BrowserMemoryBytes: BrowserMemoryBytes
+        SysinternalsDiskExtOutput: SysinternalsDiskExtOutput,
+        SysinternalsRamMapAvailable: SysinternalsRamMapAvailable,
+        SysinternalsProcDumpAnalysis: SysinternalsProcDumpAnalysis
     );
 }

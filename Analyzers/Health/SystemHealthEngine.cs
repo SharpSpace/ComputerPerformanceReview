@@ -46,6 +46,13 @@ public sealed class SystemHealthEngine
     private readonly List<int> _storageErrorSamples = [];
     private int _freezeCount;
 
+    // Sysinternals ProcDump integration
+    private DateTime _lastProcDumpRun = DateTime.MinValue;
+    private const int ProcDumpCooldownSeconds = 300; // Run ProcDump at most every 5 minutes
+    private string? _cachedProcDumpPath;
+    private MiniDumpAnalysis? _cachedProcDumpAnalysis;
+    private Task? _procDumpTask;
+
     public List<MonitorEvent> AllEvents { get; } = [];
 
     public SystemHealthEngine()
@@ -88,6 +95,11 @@ public sealed class SystemHealthEngine
         int latencyScore = ComputeSystemLatencyScore(rawSample);
         builder.MemoryPressureIndex = memPressure;
         builder.SystemLatencyScore = latencyScore;
+
+        if (!string.IsNullOrWhiteSpace(_cachedProcDumpPath))
+            builder.SysinternalsProcDumpPath = _cachedProcDumpPath;
+        if (_cachedProcDumpAnalysis is not null)
+            builder.SysinternalsProcDumpAnalysis = _cachedProcDumpAnalysis;
 
         // 5. Freeze detector — klassificera varje hängande process
         FreezeClassification? freezeInfo = null;
@@ -136,6 +148,25 @@ public sealed class SystemHealthEngine
                         TimeSpan.FromSeconds(firstHang.HangSeconds), 
                         sampleWithScores);
                     builder.DeepFreezeReport = deepFreezeReport;
+
+                    if (firstHang.HangSeconds >= 15
+                        && (DateTime.Now - _lastProcDumpRun).TotalSeconds >= ProcDumpCooldownSeconds)
+                    {
+                        _lastProcDumpRun = DateTime.Now;
+                        _procDumpTask = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var path = await SysinternalsHelper.RunProcDumpAsync(procId.Value, firstHang.Name, "hang");
+                                if (!string.IsNullOrWhiteSpace(path))
+                                {
+                                    _cachedProcDumpPath = path;
+                                    _cachedProcDumpAnalysis = MiniDumpHelper.AnalyzeMiniDump(path);
+                                }
+                            }
+                            catch { /* Ignore Sysinternals failures - not critical */ }
+                        });
+                    }
                 }
             }
             

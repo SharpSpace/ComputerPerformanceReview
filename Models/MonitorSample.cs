@@ -50,6 +50,9 @@ public sealed record MonitorSample(
     string? ActivePowerPlan = null,
     int BrowserProcessCount = 0,
     long BrowserMemoryBytes = 0
+    string? SysinternalsDiskExtOutput = null,
+    bool? SysinternalsRamMapAvailable = null,
+    MiniDumpAnalysis? SysinternalsProcDumpAnalysis = null
 );
 
 public sealed record HangingProcessInfo(string Name, double HangSeconds);

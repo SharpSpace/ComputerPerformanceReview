@@ -194,6 +194,13 @@ public static class MonitorDisplay
             Console.ResetColor();
             Console.WriteLine($"{worst.Name} (R {worst.ReadLatencyMs:F1}ms, W {worst.WriteLatencyMs:F1}ms, kö {worst.QueueLength:F1}, busy {worst.BusyPercent:F0}%)");
         }
+        if (!string.IsNullOrWhiteSpace(sample.SysinternalsDiskExtOutput))
+        {
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.Write("  DiskExt: ");
+            Console.ResetColor();
+            Console.WriteLine(sample.SysinternalsDiskExtOutput);
+        }
         // GDI warnings
         var highGdi = sample.TopGdiProcesses
             .Where(p => p.GdiObjects > 2000)
@@ -241,6 +248,15 @@ public static class MonitorDisplay
             var poolStr = string.Join(", ", sample.SysinternalsPoolData.Take(3).Select(p =>
                 $"{p.Tag} ({ConsoleHelper.FormatBytes(p.Bytes)})"));
             Console.WriteLine(poolStr);
+        }
+
+        if (sample.SysinternalsRamMapAvailable == true && sample.MemoryPressureIndex > 70)
+        {
+            Console.Write("  ");
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.Write("RAMMap: ");
+            Console.ResetColor();
+            Console.WriteLine("tillgänglig");
         }
 
         // Hanging processes with live duration + freeze classification
@@ -356,6 +372,29 @@ public static class MonitorDisplay
                             Console.ForegroundColor = ConsoleColor.DarkGray;
                             Console.WriteLine($"                - Exception: {analysis.ExceptionCode}");
                         }
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(sample.SysinternalsProcDumpPath))
+                {
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    Console.Write("              ProcDump: ");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine(Path.GetFileName(sample.SysinternalsProcDumpPath));
+                }
+
+                if (sample.SysinternalsProcDumpAnalysis != null)
+                {
+                    var analysis = sample.SysinternalsProcDumpAnalysis;
+                    if (analysis.FaultingModule != null)
+                    {
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.WriteLine($"                - {analysis.FaultingModule}");
+                    }
+                    if (analysis.ExceptionCode != null)
+                    {
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.WriteLine($"                - Exception: {analysis.ExceptionCode}");
                     }
                 }
                 

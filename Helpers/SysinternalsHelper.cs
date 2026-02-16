@@ -80,6 +80,45 @@ public static class SysinternalsHelper
     }
 
     /// <summary>
+    /// Executes DiskExt to show volume to disk mapping
+    /// </summary>
+    public static async Task<string?> RunDiskExtAsync()
+    {
+        var toolPath = await GetToolPathAsync("diskext");
+        if (toolPath == null)
+            return null;
+
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = toolPath,
+                Arguments = "-accepteula",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(startInfo);
+            if (process == null)
+                return null;
+
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+                return null;
+
+            return string.IsNullOrWhiteSpace(output) ? null : output;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception || ex is UnauthorizedAccessException || ex is InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Downloads and extracts a Sysinternals tool
     /// </summary>
     private static async Task DownloadToolAsync(SysinternalsToolInfo toolInfo)
