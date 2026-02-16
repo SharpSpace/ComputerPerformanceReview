@@ -62,6 +62,39 @@ public static class ConsoleHelper
             Console.WriteLine($"             → {result.Recommendation}");
             Console.ResetColor();
         }
+
+        // Display action steps if available
+        if (result.ActionSteps is { Count: > 0 })
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"             ÅTGÄRDER:");
+            Console.ResetColor();
+            
+            for (int i = 0; i < result.ActionSteps.Count; i++)
+            {
+                var step = result.ActionSteps[i];
+                Console.ForegroundColor = ConsoleColor.Gray;
+                Console.Write($"               {i + 1}. ");
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write(step.Title);
+                
+                if (!string.IsNullOrEmpty(step.Difficulty))
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.Write($" [{step.Difficulty}]");
+                }
+                
+                Console.WriteLine();
+                
+                if (!string.IsNullOrEmpty(step.CommandHint))
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkCyan;
+                    Console.WriteLine($"                  Kommando: {step.CommandHint}");
+                }
+                
+                Console.ResetColor();
+            }
+        }
     }
 
     public static void WriteReport(AnalysisReport report)

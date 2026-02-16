@@ -4,6 +4,30 @@ En Windows-konsolapplikation som undersöker varför en dator blir seg, hänger 
 
 ## Funktioner
 
+### ✨ Förbättrade prestandatips (Nytt!)
+
+Programmet ger nu **konkreta, icke-tekniska åtgärdsförslag** för varje prestandaproblem:
+
+- **DNS-latens?** → Steg-för-steg guide för att byta till 1.1.1.1 eller 8.8.8.8
+- **GPU TDR-fel?** → Detaljerade instruktioner för drivrutinsuppdatering med DDU
+- **Lågt diskutrymme?** → Konkreta rensningsåtgärder (cleanmgr, temp-filer, cache)
+- **Energisparläge?** → Guide för att byta till Balanserad/Hög prestanda
+- **Många webbläsarflikar?** → Tips om Tab Suspender och hur man hittar tunga flikar (Shift+Esc)
+- **Bloatware?** → Identifierar OEM-verktyg, trial-antivirus och launcher-program
+
+#### Nya analyser i Snabbanalys
+- **Energischema** — Varnar om Power Saver på stationär/nätström
+- **Installerade program** — Flaggar bloatware, flera antivirusprogram
+- **Startprogram (förbättrad)** — Identifierar onödiga autostart-program
+
+#### Nya analyser i Övervakning
+- **Diskutrymme** — Kontinuerlig övervakning av ledigt utrymme per disk
+- **Webbläsaranvändning** — Spårar antal processer och RAM-förbrukning
+- **Energischema** — Upptäcker energisparläge under körning
+- **Startprogram** — Periodisk kontroll av autostart-program
+
+Alla tips inkluderar **ActionSteps** med svårighetsgrader (Lätt/Medel) och konkreta kommandon.
+
 ### Sysinternals-integration
 
 Programmet integrerar automatiskt med **Microsoft Sysinternals Tools** för djupare diagnostik:
@@ -143,6 +167,54 @@ Varje klassificering inkluderar **bevisrader** som visar exakt vilka mätvärden
 | GPU-mättnad | >95% utilization |
 | GPU TDR | TDR-events i systemloggen |
 | DNS-latens | >300ms |
+| **Lågt diskutrymme** | <15% ledigt (varning), <8% ledigt (kritiskt) |
+| **Många webbläsarprocesser** | >15 browserprocesser eller >4GB RAM |
+| **Energisparläge** | Power saver aktivt på stationär/nätström |
+| **Många startprogram** | >15 autostart-program (varning), >25 (kritiskt) |
+
+### Konkreta åtgärdsförslag
+
+Alla prestandaproblem inkluderar nu **detaljerade, konkreta åtgärdsförslag** på svenska:
+
+#### Exempel: DNS-latens
+```
+ÅTGÄRDER:
+1) Byt DNS-server till snabbare alternativ:
+   - Öppna Nätverksinställningar → Ändra adapterkonfiguration
+   - Högerklicka på nätverket → Egenskaper
+   - Internet Protocol Version 4 → Använd följande DNS-servrar:
+     Primär: 1.1.1.1 (Cloudflare) eller 8.8.8.8 (Google)
+     Sekundär: 1.0.0.1 eller 8.8.4.4
+2) Kontrollera routern: Starta om, uppdatera firmware
+3) Rensa DNS-cache: Kör 'ipconfig /flushdns' som admin
+4) Inaktivera VPN tillfälligt för att testa
+```
+
+#### Exempel: GPU TDR (Driver Timeout)
+```
+ÅTGÄRDER:
+1) Uppdatera GPU-drivrutinen:
+   - NVIDIA: geforce.com/drivers
+   - AMD: amd.com/support
+   - Intel: intel.com/support
+2) Använd DDU (Display Driver Uninstaller):
+   - Boota i felsäkert läge
+   - Kör DDU → Avinstallera drivrutin
+   - Starta om → Installera ny drivrutin
+3) Om nyligen uppdaterad: Rulla tillbaka via Enhetshanteraren
+4) Kontrollera GPU-temperatur
+5) Om överklockat: Återställ till fabriksinställningar
+```
+
+#### Exempel: Disklatens
+```
+ÅTGÄRDER:
+1) Uppgradera till SSD för systemdisken (C:) om HDD
+2) Kör diskkontroll: 'chkdsk C: /F /R' som admin
+3) Kontrollera SMART-status med CrystalDiskInfo
+4) Avaktivera Windows Search-indexering temporärt
+5) Flytta stora spel/program till separat SSD
+```
 
 ## Rapport och loggning
 
@@ -176,8 +248,11 @@ Program.cs                      ← Startmeny, lägesval
 │   ├── DiskAnalyzer.cs
 │   ├── NetworkAnalyzer.cs
 │   ├── GpuAnalyzer.cs
-│   ├── StartupAnalyzer.cs
-│   └── SystemAnalyzer.cs
+│   ├── StartupAnalyzer.cs          ← Bloatware-detektion
+│   ├── SystemAnalyzer.cs
+│   ├── PowerPlanAnalyzer.cs        ← **NY: Energischema-analys**
+│   ├── InstalledProgramsAnalyzer.cs ← **NY: Bloatware & multipla AV**
+│   └── DriverAnalyzer.cs
 │
 ├── Övervakning
 │   ├── MonitorAnalyzer.cs          ← Tunnlager: loop + JSON-sparning
@@ -186,9 +261,13 @@ Program.cs                      ← Startmeny, lägesval
 │       ├── CpuSchedulerHealthAnalyzer ← WMI: CPU, DPC, IRQ, scheduler
 │       ├── DiskHealthAnalyzer       ← WMI: diskkö, latens, per-disk, event log
 │       ├── GpuHealthAnalyzer        ← WMI: GPU-utilization, VRAM, TDR
-│       ├── NetworkLatencyHealthAnalyzer ← DNS-latens
+│       ├── NetworkLatencyHealthAnalyzer ← DNS-latens med konkreta tips
 │       ├── ProcessHealthAnalyzer    ← Per-process: CPU, RAM, handles, GDI, trådar, I/O, page faults
-│       └── FreezeDetector           ← Klassificerar orsak till hängningar
+│       ├── FreezeDetector           ← Klassificerar orsak till hängningar
+│       ├── DiskSpaceHealthSubAnalyzer ← **NY: Diskutrymme & cleanup-tips**
+│       ├── BrowserHealthSubAnalyzer  ← **NY: Webbläsarprocesser & RAM**
+│       ├── PowerPlanHealthSubAnalyzer ← **NY: Energischema i realtid**
+│       └── StartupHealthSubAnalyzer  ← **NY: Startprogram-övervakning**
 │
 ├── Helpers/
 │   ├── MonitorDisplay.cs           ← Dashboard + slutrapport (färgkodad)
@@ -204,13 +283,15 @@ Program.cs                      ← Startmeny, lägesval
 │   └── IHealthSubAnalyzer.cs       ← Collect() + Analyze() för övervaknings-sub-analyzers
 │
 └── Models/
-    ├── MonitorSample.cs            ← ~40-fälts realtidsdata + MonitorReport + JSON-kontext
+    ├── MonitorSample.cs            ← ~50-fälts realtidsdata + MonitorReport + JSON-kontext
     ├── MonitorSampleBuilder.cs     ← Mutabel builder → immutabelt MonitorSample
     ├── HealthScore.cs              ← Hälsopoäng per domän
     ├── HealthAssessment.cs         ← Score + events från sub-analyzer
     ├── CompositeScores.cs          ← FreezeClassification
     ├── AnalysisReport.cs           ← Snabbanalys-rapport
-    ├── AnalysisResult.cs           ← Resultatrad (snabbanalys)
+    ├── AnalysisResult.cs           ← Resultatrad med ActionSteps
+    ├── ActionStep.cs               ← **NY: Konkret åtgärd med kommando & svårighetsgrad**
+    ├── DiskSpaceInfo.cs            ← **NY: Diskutrymme per volym**
     ├── RunLog.cs                   ← Historisk körningslogg
     ├── ProcessInfo.cs              ← Processinfo (snabbanalys)
     ├── ProcessMemorySnapshot.cs    ← Minnesdetail (snabbanalys)

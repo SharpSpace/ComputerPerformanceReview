@@ -46,6 +46,10 @@ public sealed record MonitorSample(
     List<SysinternalsHandleInfo>? SysinternalsHandleData = null,
     string? SysinternalsProcDumpPath = null,
     List<SysinternalsPoolAllocation>? SysinternalsPoolData = null,
+    List<DiskSpaceInfo>? DiskSpaces = null,
+    string? ActivePowerPlan = null,
+    int BrowserProcessCount = 0,
+    long BrowserMemoryBytes = 0
     string? SysinternalsDiskExtOutput = null,
     bool? SysinternalsRamMapAvailable = null,
     MiniDumpAnalysis? SysinternalsProcDumpAnalysis = null

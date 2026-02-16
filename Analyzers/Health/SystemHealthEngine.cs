@@ -65,7 +65,11 @@ public sealed class SystemHealthEngine
             new DiskHealthAnalyzer(),
             new GpuHealthAnalyzer(),
             new NetworkLatencyHealthAnalyzer(),
-            _processAnalyzer
+            _processAnalyzer,
+            new DiskSpaceHealthSubAnalyzer(),
+            new BrowserHealthSubAnalyzer(),
+            new PowerPlanHealthSubAnalyzer(),
+            new StartupHealthSubAnalyzer()
         ];
         InitializeNetworkBaseline();
     }

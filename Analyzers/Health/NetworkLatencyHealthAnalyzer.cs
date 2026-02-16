@@ -38,7 +38,13 @@ public sealed class NetworkLatencyHealthAnalyzer : IHealthSubAnalyzer
                     "DnsLatency",
                     $"Hög DNS-latens: {current.DnsLatencyMs:F0} ms",
                     critical ? "Critical" : "Warning",
-                    "Hög DNS-latens kan ge UI-häng i appar som väntar på nätverk. Kontrollera DNS-server, VPN och nätverksdrivrutin."));
+                    "Hög DNS-latens kan ge UI-häng i appar som väntar på nätverk. " +
+                    "ÅTGÄRDER: " +
+                    "1) Byt DNS-server till snabbare alternativ: Öppna Nätverksinställningar → Ändra adapterkonfiguration → Högerklicka på nätverket → Egenskaper → Internet Protocol Version 4 → Använd följande DNS-servrar: Primär 1.1.1.1 (Cloudflare) eller 8.8.8.8 (Google), Sekundär 1.0.0.1 eller 8.8.4.4. " +
+                    "2) Kontrollera routern: Starta om routern, uppdatera firmware. " +
+                    "3) Rensa DNS-cache: Öppna Kommandotolken som admin → Kör 'ipconfig /flushdns'. " +
+                    "4) Inaktivera VPN tillfälligt för att se om det är orsaken. " +
+                    "5) Kontrollera om antivirusprogram blockerar eller skannar nätverkstrafik."));
             }
         }
         else

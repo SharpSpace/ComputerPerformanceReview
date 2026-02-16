@@ -50,6 +50,10 @@ public sealed class MonitorSampleBuilder
     public List<SysinternalsHandleInfo>? SysinternalsHandleData { get; set; }
     public string? SysinternalsProcDumpPath { get; set; }
     public List<SysinternalsPoolAllocation>? SysinternalsPoolData { get; set; }
+    public List<DiskSpaceInfo>? DiskSpaces { get; set; }
+    public string? ActivePowerPlan { get; set; }
+    public int BrowserProcessCount { get; set; }
+    public long BrowserMemoryBytes { get; set; }
     public string? SysinternalsDiskExtOutput { get; set; }
     public bool? SysinternalsRamMapAvailable { get; set; }
     public MiniDumpAnalysis? SysinternalsProcDumpAnalysis { get; set; }
@@ -98,6 +102,10 @@ public sealed class MonitorSampleBuilder
         SysinternalsHandleData: SysinternalsHandleData,
         SysinternalsProcDumpPath: SysinternalsProcDumpPath,
         SysinternalsPoolData: SysinternalsPoolData,
+        DiskSpaces: DiskSpaces,
+        ActivePowerPlan: ActivePowerPlan,
+        BrowserProcessCount: BrowserProcessCount,
+        BrowserMemoryBytes: BrowserMemoryBytes
         SysinternalsDiskExtOutput: SysinternalsDiskExtOutput,
         SysinternalsRamMapAvailable: SysinternalsRamMapAvailable,
         SysinternalsProcDumpAnalysis: SysinternalsProcDumpAnalysis

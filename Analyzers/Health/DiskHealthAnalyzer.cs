@@ -114,9 +114,13 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
                     "DiskBottleneck",
                     $"Disk I/O-flaskhals: kölängd {current.DiskQueueLength:F1} i {_consecutiveHighDiskQueue * 3} sekunder",
                     isCritical ? "Critical" : "Warning",
-                    "Kontrollera bakgrundsprocesser. "
-                    + GetTopIoHint(current)
-                    + GetWorstDiskHint(worstDisk)));
+                    "Disken är överbelastad med I/O-förfrågningar vilket ger långsam respons. ÅTGÄRDER: " +
+                    "1) Identifiera tung I/O: " + GetTopIoHint(current) +
+                    "2) Stäng tunga nedladdningar, backup-jobb eller filsynkronisering (OneDrive, Dropbox). " +
+                    "3) Om HDD: Uppgradera till SSD för systemdisken (C:). " +
+                    "4) Flytta stora spel/program till separat SSD. " +
+                    "5) Kontrollera diskhälsa: Kör 'wmic diskdrive get status' i Kommandotolken — alla diskar ska visa 'OK'. " +
+                    GetWorstDiskHint(worstDisk)));
             }
         }
         else
@@ -138,9 +142,13 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
                     "DiskLatency",
                     $"Disk-latens: Läs {current.AvgDiskSecRead * 1000:F1}ms, Skriv {current.AvgDiskSecWrite * 1000:F1}ms",
                     isCritical ? "Critical" : "Warning",
-                    $"Diskens svarstid är hög ({maxLatencyMs:F0}ms). "
-                    + GetTopIoHint(current)
-                    + GetWorstDiskHint(worstDisk)));
+                    $"Diskens svarstid är hög ({maxLatencyMs:F0}ms) vilket ger seg systemrespons. ÅTGÄRDER: " +
+                    "1) Identifiera I/O-belastning: " + GetTopIoHint(current) +
+                    "2) Om HDD: Uppgradera till SSD för markant bättre latens (<1ms istället för 10-20ms). " +
+                    "3) Kör diskkontroll: Öppna Kommandotolken som admin → Kör 'chkdsk C: /F /R' (ersätt C: med aktuell disk) → Acceptera omstart. " +
+                    "4) Kontrollera SMART-status: Använd verktyg som CrystalDiskInfo för att se diskhälsa. " +
+                    "5) Avaktivera Windows Search-indexering temporärt: services.msc → Windows Search → Stoppa. " +
+                    GetWorstDiskHint(worstDisk)));
             }
         }
         else
@@ -156,7 +164,14 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
                 "StorageReset",
                 $"Lagringsfel i systemloggen: {current.StorageErrorsLast15Min} senaste 15 min",
                 current.StorageErrorsLast15Min > 5 ? "Critical" : "Warning",
-                "Disk/controller rapporterar fel eller timeout (ex. Event ID 129/153/7/51). Kontrollera kablar, firmware, drivrutiner och diskhälsa."));
+                "Disk/controller rapporterar fel eller timeout (Event ID 129/153/7/51) vilket kan tyda på hårdvaruproblem. " +
+                "ÅTGÄRDER: " +
+                "1) Kontrollera SMART-status: Ladda ner CrystalDiskInfo och se diskhälsa — 'Caution' eller 'Bad' indikerar diskfel. " +
+                "2) Uppdatera lagringsdrivrutiner: Enhetshanteraren → IDE ATA/ATAPI-styrenheter → Högerklicka → Uppdatera drivrutin. " +
+                "3) Kontrollera kablar: Byt SATA-kabel eller kontrollera M.2-kontakten. " +
+                "4) Kör diskkontroll: chkdsk C: /F /R i Kommandotolken som admin. " +
+                "5) Uppdatera disk/controller-firmware från tillverkarens webbplats. " +
+                "6) Om problemen kvarstår: Backa upp data omedelbart — disken kan vara på väg att gå sönder."));
         }
 
         healthScore = Math.Clamp(healthScore, 0, 100);
