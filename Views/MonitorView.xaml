@@ -1,0 +1,428 @@
+<UserControl x:Class="ComputerPerformanceReview.Views.MonitorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:ComputerPerformanceReview.Converters">
+    <UserControl.Resources>
+        <conv:PercentToColorConverter x:Key="PctColor"/>
+        <conv:SeverityToColorConverter x:Key="SevColor"/>
+        <conv:BytesToStringConverter x:Key="Bytes"/>
+        <conv:NumberToCompactConverter x:Key="Compact"/>
+        <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
+    </UserControl.Resources>
+
+    <Grid Background="{DynamicResource WindowBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- Header -->
+            <RowDefinition Height="Auto"/>   <!-- Top gauges -->
+            <RowDefinition Height="Auto"/>   <!-- Health bars -->
+            <RowDefinition Height="Auto"/>   <!-- System details -->
+            <RowDefinition Height="Auto"/>   <!-- History charts -->
+            <RowDefinition Height="*"/>      <!-- Main content (processes + disk + events) -->
+            <RowDefinition Height="Auto"/>   <!-- Status bar -->
+        </Grid.RowDefinitions>
+
+        <!-- ═══ ROW 0: Header ═══ -->
+        <Border Grid.Row="0" Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource SubtleBorderBrush}" BorderThickness="0,0,0,1"
+                Padding="16,10">
+            <Grid>
+                <TextBlock Text="System Performance Monitor" FontSize="15" FontWeight="SemiBold"
+                           Foreground="{DynamicResource ForegroundBrush}"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Text="{Binding Elapsed}" Style="{StaticResource MetricLabel}" FontSize="14"
+                               VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <TextBlock Text="{Binding DurationMinutes, StringFormat='/ {0} min'}"
+                               Style="{StaticResource MetricLabel}" FontSize="14" VerticalAlignment="Center"
+                               Margin="0,0,16,0"/>
+                    <Button Content="Stop" Style="{StaticResource SecondaryButton}"
+                            Command="{Binding StopCommand}" Padding="14,4"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ═══ ROW 1: Top metric gauges ═══ -->
+        <UniformGrid Grid.Row="1" Columns="5" Margin="8,8,8,0">
+            <!-- CPU -->
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="CPU" Style="{StaticResource MetricLabel}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding CpuPercent, StringFormat='{}{0:F0}'}" Style="{StaticResource MetricValue}"/>
+                        <TextBlock Text="%" Style="{StaticResource MetricUnit}"/>
+                    </StackPanel>
+                    <ProgressBar Style="{StaticResource MetricBar}" Value="{Binding CpuPercent}"
+                                 Foreground="{Binding CpuPercent, Converter={StaticResource PctColor}}"/>
+                </StackPanel>
+            </Border>
+            <!-- RAM -->
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="RAM" Style="{StaticResource MetricLabel}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding MemoryUsedPercent, StringFormat='{}{0:F0}'}" Style="{StaticResource MetricValue}"/>
+                        <TextBlock Text="%" Style="{StaticResource MetricUnit}"/>
+                    </StackPanel>
+                    <ProgressBar Style="{StaticResource MetricBar}" Value="{Binding MemoryUsedPercent}"
+                                 Foreground="{Binding MemoryUsedPercent, Converter={StaticResource PctColor}, ConverterParameter='75,90'}"/>
+                </StackPanel>
+            </Border>
+            <!-- Disk -->
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Disk" Style="{StaticResource MetricLabel}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding DiskQueueLength, StringFormat='{}{0:F1}'}" Style="{StaticResource MetricValue}"/>
+                        <TextBlock Text="Q" Style="{StaticResource MetricUnit}"/>
+                    </StackPanel>
+                    <ProgressBar Style="{StaticResource MetricBar}" Value="{Binding DiskQueueLength}" Maximum="10"
+                                 Foreground="{Binding DiskQueueLength, Converter={StaticResource PctColor}, ConverterParameter='2,5'}"/>
+                </StackPanel>
+            </Border>
+            <!-- GPU -->
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="GPU" Style="{StaticResource MetricLabel}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding GpuUtilizationPercent, StringFormat='{}{0:F0}'}" Style="{StaticResource MetricValue}"/>
+                        <TextBlock Text="%" Style="{StaticResource MetricUnit}"/>
+                    </StackPanel>
+                    <ProgressBar Style="{StaticResource MetricBar}" Value="{Binding GpuUtilizationPercent}"
+                                 Foreground="{Binding GpuUtilizationPercent, Converter={StaticResource PctColor}, ConverterParameter='80,95'}"/>
+                </StackPanel>
+            </Border>
+            <!-- Network -->
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Network" Style="{StaticResource MetricLabel}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding NetworkMbps, StringFormat='{}{0:F1}'}" Style="{StaticResource MetricValue}"/>
+                        <TextBlock Text="Mbps" Style="{StaticResource MetricUnit}"/>
+                    </StackPanel>
+                    <ProgressBar Style="{StaticResource MetricBar}" Value="{Binding NetworkMbps}" Maximum="1000"
+                                 Foreground="{DynamicResource AccentBrush}"/>
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <!-- ═══ ROW 2: Health scores ═══ -->
+        <Grid Grid.Row="2" Margin="12,4,12,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource CardStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Memory Pressure" Style="{StaticResource StatLabel}"
+                               VerticalAlignment="Center"
+                               ToolTip="Weighted score (0-100) combining commit ratio, page fault rate, and available memory. Higher = more pressure."/>
+                    <ProgressBar Grid.Column="1" Style="{StaticResource HealthBar}" Value="{Binding MemoryPressureIndex}"
+                                 Foreground="{Binding MemoryPressureIndex, Converter={StaticResource PctColor}, ConverterParameter='25,60'}"
+                                 Margin="10,0"/>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <TextBlock Text="{Binding MemoryPressureIndex}" Style="{StaticResource StatValue}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding MemoryPressureLabel}" Style="{StaticResource StatLabel}" Margin="4,0,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource CardStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="System Latency" Style="{StaticResource StatLabel}"
+                               VerticalAlignment="Center"
+                               ToolTip="Weighted score (0-100) combining DPC/IRQ time, disk latency, and processor queue. Higher = more lag."/>
+                    <ProgressBar Grid.Column="1" Style="{StaticResource HealthBar}" Value="{Binding SystemLatencyScore}"
+                                 Foreground="{Binding SystemLatencyScore, Converter={StaticResource PctColor}, ConverterParameter='25,60'}"
+                                 Margin="10,0"/>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <TextBlock Text="{Binding SystemLatencyScore}" Style="{StaticResource StatValue}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding SystemLatencyLabel}" Style="{StaticResource StatLabel}" Margin="4,0,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══ ROW 3: System detail stats ═══ -->
+        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Margin="12,4,12,0">
+            <WrapPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="Handles:" Style="{StaticResource StatLabel}"
+                               ToolTip="Total OS handles (files, registry keys, events, etc.) open across all processes. A steady rise may indicate a handle leak."/>
+                    <TextBlock Text="{Binding TotalSystemHandles, Converter={StaticResource Compact}}" Style="{StaticResource StatValue}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="PagesIn:" Style="{StaticResource StatLabel}"
+                               ToolTip="Hard page faults per second - pages read from disk into RAM. High values mean the system is actively paging (low on RAM)."/>
+                    <TextBlock Text="{Binding PagesInputPerSec, StringFormat='{}{0:F0}/s'}" Style="{StaticResource StatValue}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="Commit:" Style="{StaticResource StatLabel}"
+                               ToolTip="Total committed virtual memory vs. the commit limit (RAM + page file). Applications crash if this is exhausted."/>
+                    <TextBlock Style="{StaticResource StatValue}">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="{}{0} / {1}">
+                                <Binding Path="CommittedBytes" Converter="{StaticResource Bytes}"/>
+                                <Binding Path="CommitLimit" Converter="{StaticResource Bytes}"/>
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="PoolNP:" Style="{StaticResource StatLabel}"
+                               ToolTip="Kernel Non-Paged Pool - memory that cannot be paged to disk. High values may indicate a kernel driver memory leak."/>
+                    <TextBlock Text="{Binding PoolNonpagedBytes, Converter={StaticResource Bytes}}" Style="{StaticResource StatValue}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="DPC:" Style="{StaticResource StatLabel}"
+                               ToolTip="Deferred Procedure Calls - time CPU spends handling delayed driver work. High DPC% usually means a misbehaving driver (audio, network, storage)."/>
+                    <TextBlock Text="{Binding DpcTimePercent, StringFormat='{}{0:F1}%'}" Style="{StaticResource StatValue}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="IRQ:" Style="{StaticResource StatLabel}"
+                               ToolTip="Interrupt Request Time - CPU time processing hardware interrupt signals from devices."/>
+                    <TextBlock Text="{Binding InterruptTimePercent, StringFormat='{}{0:F1}%'}" Style="{StaticResource StatValue}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="CtxSw:" Style="{StaticResource StatLabel}"
+                               ToolTip="Context Switches per second - how often the OS switches between threads. Very high values can indicate thread contention."/>
+                    <TextBlock Text="{Binding ContextSwitchesPerSec, Converter={StaticResource Compact}}" Style="{StaticResource StatValue}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="ProcQ:" Style="{StaticResource StatLabel}"
+                               ToolTip="Processor Queue Length - threads waiting for CPU time. Should be less than 2x your core count."/>
+                    <TextBlock Text="{Binding ProcessorQueueLength}" Style="{StaticResource StatValue}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="CPUClk:" Style="{StaticResource StatLabel}"
+                               ToolTip="Current CPU clock speed in MHz. If significantly below max, the CPU may be thermal throttling."/>
+                    <TextBlock Style="{StaticResource StatValue}">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="{}{0:F0}/{1:F0} MHz">
+                                <Binding Path="CpuClockMHz"/>
+                                <Binding Path="CpuMaxClockMHz"/>
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="DNS:" Style="{StaticResource StatLabel}"
+                               ToolTip="DNS lookup latency. High DNS latency causes delays when applications try to resolve hostnames."/>
+                    <TextBlock Text="{Binding DnsLatencyMs, StringFormat='{}{0:F0} ms'}" Style="{StaticResource StatValue}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="StorageErr:" Style="{StaticResource StatLabel}"
+                               ToolTip="Disk/controller error events (Event IDs 7, 51, 129, 153) from the Windows System event log in the last 15 minutes."/>
+                    <TextBlock Text="{Binding StorageErrorsLast15Min}" Style="{StaticResource StatValue}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,16,2">
+                    <TextBlock Text="DiskLat:" Style="{StaticResource StatLabel}"
+                               ToolTip="Average disk latency - time for a single read/write operation. Above 50ms feels sluggish, above 200ms is critical."/>
+                    <TextBlock Style="{StaticResource StatValue}">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="R {0:F1}ms  W {1:F1}ms">
+                                <Binding Path="AvgDiskSecRead"/>
+                                <Binding Path="AvgDiskSecWrite"/>
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+            </WrapPanel>
+        </Border>
+
+        <!-- ═══ ROW 4: History charts (controls created in code-behind to avoid XAML-compiler assembly resolution) ═══ -->
+        <UniformGrid Grid.Row="4" Columns="4" Margin="8,4,8,0">
+            <Border Style="{StaticResource CardStyle}" Padding="8,6">
+                <StackPanel>
+                    <TextBlock Text="CPU %" Style="{StaticResource MetricLabel}" FontSize="10"/>
+                    <ContentControl Content="{Binding CpuChartView}" Height="72"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource CardStyle}" Padding="8,6">
+                <StackPanel>
+                    <TextBlock Text="RAM %" Style="{StaticResource MetricLabel}" FontSize="10"/>
+                    <ContentControl Content="{Binding MemChartView}" Height="72"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource CardStyle}" Padding="8,6">
+                <StackPanel>
+                    <TextBlock Text="Disk Queue" Style="{StaticResource MetricLabel}" FontSize="10"/>
+                    <ContentControl Content="{Binding DiskQChartView}" Height="72"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource CardStyle}" Padding="8,6">
+                <StackPanel>
+                    <TextBlock Text="Network (Mbps)" Style="{StaticResource MetricLabel}" FontSize="10"/>
+                    <ContentControl Content="{Binding NetChartView}" Height="72"/>
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <!-- ═══ ROW 5: Main content ═══ -->
+        <ScrollViewer Grid.Row="5" Margin="8,4,8,0" VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Left: Top Processes -->
+                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource CardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="TOP PROCESSES" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Text="CPU" Style="{StaticResource MetricLabel}" Margin="0,4,0,2"/>
+                        <ItemsControl ItemsSource="{Binding TopCpuProcesses}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,1">
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource StatLabel}"/>
+                                        <TextBlock Text="{Binding Value}" Style="{StaticResource StatValue}" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="RAM" Style="{StaticResource MetricLabel}" Margin="0,6,0,2"/>
+                        <ItemsControl ItemsSource="{Binding TopMemoryProcesses}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,1">
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource StatLabel}"/>
+                                        <TextBlock Text="{Binding Value}" Style="{StaticResource StatValue}" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Right: Worst Disk -->
+                <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource CardStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionHeader}">
+                            <Run Text="WORST DISK: "/><Run Text="{Binding WorstDiskName, Mode=OneWay}"/>
+                        </TextBlock>
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition/>
+                                <ColumnDefinition/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/>
+                                <RowDefinition/>
+                                <RowDefinition/>
+                                <RowDefinition/>
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal">
+                                <TextBlock Text="Read:" Style="{StaticResource StatLabel}"/>
+                                <TextBlock Text="{Binding WorstDiskReadLatency, StringFormat='{}{0:F1} ms'}" Style="{StaticResource StatValue}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="Write:" Style="{StaticResource StatLabel}"/>
+                                <TextBlock Text="{Binding WorstDiskWriteLatency, StringFormat='{}{0:F1} ms'}" Style="{StaticResource StatValue}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal">
+                                <TextBlock Text="Queue:" Style="{StaticResource StatLabel}"/>
+                                <TextBlock Text="{Binding WorstDiskQueue, StringFormat='{}{0:F1}'}" Style="{StaticResource StatValue}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="IOPS:" Style="{StaticResource StatLabel}"/>
+                                <TextBlock Text="{Binding WorstDiskIops, StringFormat='{}{0:F0}'}" Style="{StaticResource StatValue}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal">
+                                <TextBlock Text="R:" Style="{StaticResource StatLabel}"/>
+                                <TextBlock Text="{Binding WorstDiskReadThroughput}" Style="{StaticResource StatValue}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="W:" Style="{StaticResource StatLabel}"/>
+                                <TextBlock Text="{Binding WorstDiskWriteThroughput}" Style="{StaticResource StatValue}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal">
+                                <TextBlock Text="Idle:" Style="{StaticResource StatLabel}"
+                                           ToolTip="Percentage of time the disk is idle. More reliable than Busy% on modern SSDs/NVMe. 0% = saturated, 99% = fine."/>
+                                <TextBlock Text="{Binding WorstDiskIdlePercent, StringFormat='{}{0:F0}%'}" Style="{StaticResource StatValue}" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Events -->
+                <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource CardStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionHeader}">
+                            <Run Text="EVENTS ("/>
+                            <Run Text="{Binding Events.Count, Mode=OneWay}"/>
+                            <Run Text=")"/>
+                        </TextBlock>
+                        <ItemsControl ItemsSource="{Binding Events}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{DynamicResource SubtleBorderBrush}" BorderThickness="0,0,0,1"
+                                            Padding="0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="60"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Time}" Style="{StaticResource StatLabel}"
+                                                       FontFamily="{StaticResource MonoFont}"/>
+                                            <Border Grid.Column="1" Style="{StaticResource SeverityBadge}"
+                                                    Background="{Binding Severity, Converter={StaticResource SevColor}}">
+                                                <TextBlock Text="{Binding Severity}" Foreground="White" FontSize="10" FontWeight="SemiBold"/>
+                                            </Border>
+                                            <StackPanel Grid.Column="2" Margin="6,0,0,0">
+                                                <TextBlock Text="{Binding Description}" Style="{StaticResource StatLabel}"
+                                                           Foreground="{DynamicResource ForegroundBrush}" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Tip}" Style="{StaticResource StatLabel}"
+                                                           FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                                                           Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No events recorded yet..." Style="{StaticResource StatLabel}"
+                                   Visibility="{Binding Events.Count, Converter={StaticResource BoolVis}, ConverterParameter=empty}"
+                                   Margin="0,4"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Hanging -->
+                <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource CardStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="HANGING:" Style="{StaticResource SectionHeader}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding HangingStatus}" Style="{StaticResource StatValue}"
+                                   Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- ═══ ROW 6: Status bar ═══ -->
+        <Border Grid.Row="6" Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource SubtleBorderBrush}" BorderThickness="0,1,0,0"
+                Padding="16,6">
+            <Grid>
+                <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="3"
+                             Background="{DynamicResource BarBackgroundBrush}"
+                             Foreground="{DynamicResource AccentBrush}" BorderThickness="0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -2,7 +2,7 @@ namespace ComputerPerformanceReview.Analyzers;
 
 public sealed class CpuAnalyzer : IAnalyzer
 {
-    public string Name => "CPU-analys";
+    public string Name => "CPU Analysis";
 
     public async Task<AnalysisReport> AnalyzeAsync()
     {
@@ -11,12 +11,12 @@ public sealed class CpuAnalyzer : IAnalyzer
         await AnalyzeCpuUsage(results);
         AnalyzeThreadCounts(results);
 
-        return new AnalysisReport("CPU-ANALYS", results);
+        return new AnalysisReport("CPU ANALYSIS", results);
     }
 
     private static async Task AnalyzeCpuUsage(List<AnalysisResult> results)
     {
-        ConsoleHelper.WriteProgress("Mäter CPU-användning (2 sekunder)...");
+        ConsoleHelper.WriteProgress("Measuring CPU usage (2 seconds)...");
 
         // Overall CPU via WMI (more reliable than PerformanceCounter on newer .NET)
         double overallCpu = 0;
@@ -37,9 +37,9 @@ public sealed class CpuAnalyzer : IAnalyzer
             _ => Severity.Ok
         };
 
-        results.Add(new AnalysisResult("CPU", "Total CPU-användning",
-            $"CPU-belastning: {overallCpu:F1}%", overallSeverity,
-            overallSeverity != Severity.Ok ? "Hög CPU-belastning kan orsaka att gränssnittet hänger sig" : null));
+        results.Add(new AnalysisResult("CPU", "Total CPU usage",
+            $"CPU load: {overallCpu:F1}%", overallSeverity,
+            overallSeverity != Severity.Ok ? "High CPU load can cause the UI to hang" : null));
 
         // Per-process CPU sampling
         var processCpuTimes = new Dictionary<int, (string Name, TimeSpan CpuTime)>();
@@ -88,9 +88,9 @@ public sealed class CpuAnalyzer : IAnalyzer
             var topList = string.Join(", ", topCpu.Select(p => $"{p.Name} ({p.Percent:F1}%)"));
 
             var topSeverity = topCpu[0].Percent > 50 ? Severity.Warning : Severity.Ok;
-            results.Add(new AnalysisResult("CPU", "Topp CPU-användare",
-                $"Topp 5: {topList}", topSeverity,
-                topSeverity != Severity.Ok ? $"Processen {topCpu[0].Name} använder mycket CPU" : null));
+            results.Add(new AnalysisResult("CPU", "Top CPU consumers",
+                $"Top 5: {topList}", topSeverity,
+                topSeverity != Severity.Ok ? $"Process {topCpu[0].Name} is using a lot of CPU" : null));
         }
     }
 
@@ -116,8 +116,8 @@ public sealed class CpuAnalyzer : IAnalyzer
 
         if (highThreads.Count == 0)
         {
-            results.Add(new AnalysisResult("CPU", "Trådantal",
-                "Inga processer med onormalt högt antal trådar", Severity.Ok));
+            results.Add(new AnalysisResult("CPU", "Thread count",
+                "No processes with abnormally high thread count", Severity.Ok));
         }
         else
         {
@@ -132,10 +132,10 @@ public sealed class CpuAnalyzer : IAnalyzer
 
                 if (severity != Severity.Ok)
                 {
-                    results.Add(new AnalysisResult("CPU", "Högt trådantal",
-                        $"{p.Name} (PID {p.Pid}) har {p.Threads} trådar",
+                    results.Add(new AnalysisResult("CPU", "High thread count",
+                        $"{p.Name} (PID {p.Pid}) has {p.Threads} threads",
                         severity,
-                        $"Potentiell trådläcka i {p.Name} - starta om programmet"));
+                        $"Potential thread leak in {p.Name} - restart the program"));
                 }
             }
         }

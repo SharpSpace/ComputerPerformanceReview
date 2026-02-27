@@ -1,8 +1,8 @@
 namespace ComputerPerformanceReview.Models;
 
 /// <summary>
-/// Hälsopoäng för en specifik domän (Memory, CPU, Disk, Process, Overall).
-/// Score 0-100 där 100 = fullt friskt. Confidence anger hur pålitlig mätningen är.
+/// Health score for a specific domain (Memory, CPU, Disk, Process, Overall).
+/// Score 0-100 where 100 = fully healthy. Confidence indicates how reliable the measurement is.
 /// </summary>
 public sealed record HealthScore(
     string Domain,

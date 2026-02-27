@@ -15,7 +15,7 @@ public sealed class MonitorAnalyzer
 
         var engine = new SystemHealthEngine();
 
-        // Första samplet ger sub-analyzers en CPU-baseline
+        // First sample gives sub-analyzers a CPU baseline
         engine.CollectAndAnalyze();
         await Task.Delay(SampleIntervalMs);
 
@@ -58,11 +58,11 @@ public sealed class MonitorAnalyzer
             await File.WriteAllTextAsync(path, json);
 
             Console.WriteLine();
-            ConsoleHelper.WriteInfo($"  Rapport sparad till: {Path.GetFullPath(path)}");
+            ConsoleHelper.WriteInfo($"  Report saved to: {Path.GetFullPath(path)}");
         }
         catch (Exception ex)
         {
-            ConsoleHelper.WriteWarning($"Kunde inte spara övervakningsrapport: {ex.Message}");
+            ConsoleHelper.WriteWarning($"Could not save monitoring report: {ex.Message}");
         }
     }
 }

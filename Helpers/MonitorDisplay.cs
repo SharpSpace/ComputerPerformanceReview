@@ -1,3 +1,5 @@
+using ComputerPerformanceReview.Analyzers.Health;
+
 namespace ComputerPerformanceReview.Helpers;
 
 public static class MonitorDisplay
@@ -21,7 +23,7 @@ public static class MonitorDisplay
         // Header
         Console.ForegroundColor = ConsoleColor.White;
         Console.WriteLine("╔══════════════════════════════════════════════════════════════════════╗");
-        var title = $"ÖVERVAKNINGSLÄGE ({DateTime.Now:HH:mm} - {elapsedMin}/{durationMinutes} min)";
+        var title = $"MONITORING MODE ({DateTime.Now:HH:mm} - {elapsedMin}/{durationMinutes} min)";
         var padded = title.PadLeft((70 + title.Length) / 2).PadRight(70);
         Console.WriteLine("║" + padded + "║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════════════╝");
@@ -32,7 +34,7 @@ public static class MonitorDisplay
         DrawBarPair("CPU", sample.CpuPercent, "RAM", sample.MemoryUsedPercent);
 
         // Disk & Network bars
-        string diskStr = $"{sample.DiskQueueLength:F1} kö";
+        string diskStr = $"{sample.DiskQueueLength:F1} queue";
         var diskPercent = Math.Min(sample.DiskQueueLength / 10.0 * 100, 100);
         Console.Write("  Disk: ");
         DrawBar(diskPercent, ConsoleColor.Magenta);
@@ -46,16 +48,16 @@ public static class MonitorDisplay
         Console.WriteLine();
         Console.WriteLine();
 
-        // ── SYSTEMHÄLSA ──────────────────────────────────
+        // ── SYSTEM HEALTH ──────────────────────────────────
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine("  ── SYSTEMHÄLSA ────────────────────────────────────────────────────");
+        Console.WriteLine("  ── SYSTEM HEALTH ──────────────────────────────────────────────────");
         Console.ResetColor();
 
         // Minnestryck bar
-        DrawCompositeScoreBar("Minnestryck", sample.MemoryPressureIndex, GetPressureLabel(sample.MemoryPressureIndex));
+        DrawCompositeScoreBar("Mem pressure", sample.MemoryPressureIndex, GetPressureLabel(sample.MemoryPressureIndex));
 
         // Systemlatens bar
-        DrawCompositeScoreBar("Systemlatens", sample.SystemLatencyScore, GetLatencyLabel(sample.SystemLatencyScore));
+        DrawCompositeScoreBar("Sys latency", sample.SystemLatencyScore, GetLatencyLabel(sample.SystemLatencyScore));
 
         Console.WriteLine();
 
@@ -137,13 +139,27 @@ public static class MonitorDisplay
         Console.Write($"{sample.StorageErrorsLast15Min}");
         Console.ResetColor();
         Console.WriteLine();
+
+        if (sample.StorageErrorDetails is { Count: > 0 })
+        {
+            foreach (var err in sample.StorageErrorDetails.Take(3))
+            {
+                Console.Write("    ");
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write($"Evnt {err.EventId}");
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                Console.WriteLine($" [{err.Source}] {err.Message}");
+            }
+            Console.ResetColor();
+        }
+
         Console.WriteLine();
 
         // Top CPU processes
         if (sample.TopCpuProcesses.Count > 0)
         {
             Console.ForegroundColor = ConsoleColor.Gray;
-            Console.Write("  Topp CPU: ");
+            Console.Write("  Top CPU: ");
             Console.ResetColor();
             var topStr = string.Join(", ",
                 sample.TopCpuProcesses.Take(5)
@@ -155,7 +171,7 @@ public static class MonitorDisplay
         if (sample.TopMemoryProcesses.Count > 0)
         {
             Console.ForegroundColor = ConsoleColor.Gray;
-            Console.Write("  Topp RAM: ");
+            Console.Write("  Top RAM: ");
             Console.ResetColor();
             var topStr = string.Join(", ",
                 sample.TopMemoryProcesses.Take(5)
@@ -166,7 +182,7 @@ public static class MonitorDisplay
         if (sample.TopIoProcesses.Count > 0)
         {
             Console.ForegroundColor = ConsoleColor.Gray;
-            Console.Write("  Topp I/O: ");
+            Console.Write("  Top I/O: ");
             Console.ResetColor();
             var topStr = string.Join(", ",
                 sample.TopIoProcesses.Take(3)
@@ -178,7 +194,7 @@ public static class MonitorDisplay
         if (sample.TopFaultProcesses.Count > 0)
         {
             Console.ForegroundColor = ConsoleColor.Gray;
-            Console.Write("  Topp Faults: ");
+            Console.Write("  Top Faults: ");
             Console.ResetColor();
             var topStr = string.Join(", ",
                 sample.TopFaultProcesses.Take(3)
@@ -188,11 +204,21 @@ public static class MonitorDisplay
 
         if (sample.DiskInstances.Count > 0)
         {
-            var worst = sample.DiskInstances.OrderByDescending(d => Math.Max(d.ReadLatencyMs, d.WriteLatencyMs)).First();
+            var worst = sample.DiskInstances
+                .OrderByDescending(DiskHealthAnalyzer.DiskSeverityScore)
+                .First();
             Console.ForegroundColor = ConsoleColor.Gray;
-            Console.Write("  Värst disk: ");
+            Console.Write("  Worst disk: ");
             Console.ResetColor();
-            Console.WriteLine($"{worst.Name} (R {worst.ReadLatencyMs:F1}ms, W {worst.WriteLatencyMs:F1}ms, kö {worst.QueueLength:F1}, busy {worst.BusyPercent:F0}%)");
+
+            double totalIops = worst.ReadIops + worst.WriteIops;
+            string readTp = ConsoleHelper.FormatBytes((long)worst.ReadBytesPerSec) + "/s";
+            string writeTp = ConsoleHelper.FormatBytes((long)worst.WriteBytesPerSec) + "/s";
+
+            Console.WriteLine(
+                $"{worst.Name} (R {worst.ReadLatencyMs:F1}ms, W {worst.WriteLatencyMs:F1}ms, " +
+                $"queue {worst.QueueLength:F1}, IOPS {totalIops:F0}, " +
+                $"R {readTp} W {writeTp}, idle {worst.IdlePercent:F0}%)");
         }
         if (!string.IsNullOrWhiteSpace(sample.SysinternalsDiskExtOutput))
         {
@@ -216,7 +242,7 @@ public static class MonitorDisplay
             var gdiStr = string.Join(", ",
                 highGdi.Select(p =>
                 {
-                    var tag = p.GdiObjects > 8000 ? "KRITISKT" : p.GdiObjects > 5000 ? "varning" : "";
+                    var tag = p.GdiObjects > 8000 ? "CRITICAL" : p.GdiObjects > 5000 ? "warning" : "";
                     var suffix = tag.Length > 0 ? $" ({tag})" : "";
                     return $"{p.Name} {p.GdiObjects} obj{suffix}";
                 }));
@@ -233,7 +259,7 @@ public static class MonitorDisplay
             var handleStr = string.Join(", ", sample.SysinternalsHandleData.Take(2).Select(h =>
             {
                 var topType = h.HandleTypeBreakdown.OrderByDescending(kvp => kvp.Value).FirstOrDefault();
-                return $"{h.ProcessName} ({h.TotalHandles} total, topp: {topType.Key} {topType.Value})";
+                return $"{h.ProcessName} ({h.TotalHandles} total, top: {topType.Key} {topType.Value})";
             }));
             Console.WriteLine(handleStr);
         }
@@ -256,13 +282,13 @@ public static class MonitorDisplay
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.Write("RAMMap: ");
             Console.ResetColor();
-            Console.WriteLine("tillgänglig");
+            Console.WriteLine("available");
         }
 
         // Hanging processes with live duration + freeze classification
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.Gray;
-        Console.Write("  Hängande: ");
+        Console.Write("  Hanging: ");
         if (sample.HangingProcesses.Count > 0)
         {
             Console.ForegroundColor = ConsoleColor.Red;
@@ -278,11 +304,11 @@ public static class MonitorDisplay
             if (sample.FreezeInfo is not null)
             {
                 Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.Write("            → Trolig orsak: ");
+                Console.Write("            → Likely cause: ");
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine(sample.FreezeInfo.LikelyCause);
 
-                // Evidence list — visar bevis för klassificeringen
+                // Evidence list — shows evidence for the classification
                 if (sample.FreezeInfo.Evidence is { Count: > 0 })
                 {
                     foreach (var ev in sample.FreezeInfo.Evidence)
@@ -305,7 +331,7 @@ public static class MonitorDisplay
                 var report = sample.DeepFreezeReport;
                 Console.WriteLine();
                 Console.ForegroundColor = ConsoleColor.Magenta;
-                Console.WriteLine("            ┌─ DJUPANALYS (Deep Freeze Investigation) ─────────────┐");
+                Console.WriteLine("            ┌─ DEEP ANALYSIS (Deep Freeze Investigation) ────────────┐");
                 Console.ResetColor();
                 
                 Console.ForegroundColor = ConsoleColor.Gray;
@@ -314,19 +340,19 @@ public static class MonitorDisplay
                 Console.WriteLine($"{report.ProcessName} (PID {report.ProcessId})");
                 
                 Console.ForegroundColor = ConsoleColor.Gray;
-                Console.Write("              Frysduration: ");
+                Console.Write("              Freeze duration: ");
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine($"{report.FreezeDuration.TotalSeconds:F1}s");
                 
                 Console.ForegroundColor = ConsoleColor.Gray;
-                Console.Write("              Trådar: ");
+                Console.Write("              Threads: ");
                 Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine($"{report.TotalThreads} totalt, {report.RunningThreads} körande");
+                Console.WriteLine($"{report.TotalThreads} total, {report.RunningThreads} running");
                 
                 if (report.WaitReasonCounts.Count > 0)
                 {
                     Console.ForegroundColor = ConsoleColor.Gray;
-                    Console.WriteLine("              Vänteorsaker:");
+                    Console.WriteLine("              Wait reasons:");
                     foreach (var kvp in report.WaitReasonCounts.OrderByDescending(x => x.Value))
                     {
                         Console.ForegroundColor = ConsoleColor.DarkGray;
@@ -334,20 +360,20 @@ public static class MonitorDisplay
                         Console.ForegroundColor = kvp.Key == report.DominantWaitReason 
                             ? ConsoleColor.Yellow 
                             : ConsoleColor.White;
-                        Console.WriteLine($"{kvp.Key}: {kvp.Value} trådar");
+                        Console.WriteLine($"{kvp.Key}: {kvp.Value} threads");
                     }
                 }
                 
                 if (report.DominantWaitReason != null)
                 {
                     Console.ForegroundColor = ConsoleColor.Gray;
-                    Console.Write("              Dominerande: ");
+                    Console.Write("              Dominant: ");
                     Console.ForegroundColor = ConsoleColor.Yellow;
                     Console.WriteLine(report.DominantWaitReason);
                 }
                 
                 Console.ForegroundColor = ConsoleColor.Gray;
-                Console.Write("              Trolig grundorsak: ");
+                Console.Write("              Likely root cause: ");
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine(report.LikelyRootCause);
                 
@@ -406,7 +432,7 @@ public static class MonitorDisplay
         else
         {
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("Inga");
+            Console.WriteLine("None");
         }
         Console.ResetColor();
 
@@ -416,7 +442,7 @@ public static class MonitorDisplay
         if (events.Count > 0)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"  HÄNDELSER ({events.Count}):");
+            Console.WriteLine($"  EVENTS ({events.Count}):");
             Console.ResetColor();
 
             var visibleEvents = events
@@ -428,7 +454,7 @@ public static class MonitorDisplay
             foreach (var ev in visibleEvents)
             {
                 var color = ev.Severity == "Critical" ? ConsoleColor.Red : ConsoleColor.Yellow;
-                var label = ev.Severity == "Critical" ? "KRITISKT" : "VARNING";
+                var label = ev.Severity == "Critical" ? "CRITICAL" : "WARNING";
 
                 Console.Write($"  {ev.Timestamp:HH:mm:ss}  ");
                 Console.ForegroundColor = color;
@@ -448,20 +474,20 @@ public static class MonitorDisplay
             if (events.Count > MaxVisibleEvents)
             {
                 Console.ForegroundColor = ConsoleColor.DarkGray;
-                Console.WriteLine($"  ... och {events.Count - MaxVisibleEvents} tidigare händelser");
+                Console.WriteLine($"  ... and {events.Count - MaxVisibleEvents} earlier events");
                 Console.ResetColor();
             }
         }
         else
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine("  Inga händelser registrerade ännu...");
+            Console.WriteLine("  No events recorded yet...");
             Console.ResetColor();
         }
 
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine("  Tryck Q för att avsluta övervakningen");
+        Console.WriteLine("  Press Q to stop monitoring");
         Console.ResetColor();
     }
 
@@ -470,32 +496,32 @@ public static class MonitorDisplay
         Console.Clear();
         Console.CursorVisible = true;
 
-        ConsoleHelper.WriteHeader("ÖVERVAKNINGSRAPPORT");
+        ConsoleHelper.WriteHeader("MONITORING REPORT");
 
         var duration = report.EndTime - report.StartTime;
-        ConsoleHelper.WriteInfo($"  Övervakningstid: {duration.TotalMinutes:F0} minuter ({report.TotalSamples} samples)");
+        ConsoleHelper.WriteInfo($"  Monitoring duration: {duration.TotalMinutes:F0} minutes ({report.TotalSamples} samples)");
         ConsoleHelper.WriteInfo($"  Period: {report.StartTime:yyyy-MM-dd HH:mm} → {report.EndTime:HH:mm}");
         Console.WriteLine();
 
         // Stats table
         Console.ForegroundColor = ConsoleColor.White;
-        Console.WriteLine("  {0,-25} {1,-15} {2,-15}", "Mätvärde", "Genomsnitt", "Peak");
+        Console.WriteLine("  {0,-25} {1,-15} {2,-15}", "Metric", "Average", "Peak");
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine("  " + new string('─', 55));
         Console.ResetColor();
 
         WriteStatRow("CPU", report.AvgCpu, report.PeakCpu, "%", 80, 95);
         WriteStatRow("RAM", report.AvgMemory, report.PeakMemory, "%", 75, 90);
-        WriteStatRow("Disk-kö", report.AvgDiskQueue, report.PeakDiskQueue, "", 2, 5);
-        WriteStatRow("Nätverk", report.AvgNetworkMbps, report.PeakNetworkMbps, " Mbps", 100, 500);
-        WriteStatRow("Minnestryck-index", (double)report.AvgMemoryPressureIndex, (double)report.PeakMemoryPressureIndex, "/100", 60, 80);
-        WriteStatRow("Systemlatens-score", (double)report.AvgSystemLatencyScore, (double)report.PeakSystemLatencyScore, "/100", 50, 75);
+        WriteStatRow("Disk queue", report.AvgDiskQueue, report.PeakDiskQueue, "", 2, 5);
+        WriteStatRow("Network", report.AvgNetworkMbps, report.PeakNetworkMbps, " Mbps", 100, 500);
+        WriteStatRow("Memory pressure index", (double)report.AvgMemoryPressureIndex, (double)report.PeakMemoryPressureIndex, "/100", 60, 80);
+        WriteStatRow("System latency score", (double)report.AvgSystemLatencyScore, (double)report.PeakSystemLatencyScore, "/100", 50, 75);
 
         Console.WriteLine();
 
         // Extended peak stats
         Console.ForegroundColor = ConsoleColor.White;
-        Console.WriteLine("  Detaljerade toppar:");
+        Console.WriteLine("  Detailed peaks:");
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine("  " + new string('─', 55));
         Console.ResetColor();
@@ -503,8 +529,8 @@ public static class MonitorDisplay
         WritePeakStat("Handles (peak)", $"{report.PeakSystemHandles,6}", report.PeakSystemHandles > 100000);
         WritePeakStat("Committed (peak)", ConsoleHelper.FormatBytes(report.PeakCommittedBytes), false);
         WritePeakStat("PagesInput (peak)", $"{report.PeakPagesInputPerSec:F0}/s", report.PeakPagesInputPerSec > 300);
-        WritePeakStat("DPC-tid (peak)", $"{report.PeakDpcTimePercent:F1}%", report.PeakDpcTimePercent > 15);
-        WritePeakStat("IRQ-tid (peak)", $"{report.PeakInterruptTimePercent:F1}%", report.PeakInterruptTimePercent > 10);
+        WritePeakStat("DPC time (peak)", $"{report.PeakDpcTimePercent:F1}%", report.PeakDpcTimePercent > 15);
+        WritePeakStat("IRQ time (peak)", $"{report.PeakInterruptTimePercent:F1}%", report.PeakInterruptTimePercent > 10);
         WritePeakStat("Ctx Switches (peak)", $"{report.PeakContextSwitchesPerSec:F0}/s", false);
         WritePeakStat("Proc Queue (peak)", $"{report.PeakProcessorQueueLength}", report.PeakProcessorQueueLength > 2 * Environment.ProcessorCount);
         WritePeakStat("Disk Read Lat (peak)", $"{report.PeakAvgDiskSecRead * 1000:F1} ms", report.PeakAvgDiskSecRead * 1000 > 50);
@@ -512,12 +538,12 @@ public static class MonitorDisplay
         WritePeakStat("Pool Nonpaged (peak)", ConsoleHelper.FormatBytes(report.PeakPoolNonpagedBytes), report.PeakPoolNonpagedBytes > 200L * 1024 * 1024);
         WritePeakStat("Pool Paged (peak)", ConsoleHelper.FormatBytes(report.PeakPoolPagedBytes), false);
         WritePeakStat("GPU (peak)", $"{report.PeakGpuUtilizationPercent:F0}%", report.PeakGpuUtilizationPercent > 95);
-        WritePeakStat("DNS Latens (peak)", $"{report.PeakDnsLatencyMs:F0} ms", report.PeakDnsLatencyMs > 300);
+        WritePeakStat("DNS latency (peak)", $"{report.PeakDnsLatencyMs:F0} ms", report.PeakDnsLatencyMs > 300);
         WritePeakStat("Storage errors (15m peak)", $"{report.PeakStorageErrorsLast15Min}", report.PeakStorageErrorsLast15Min > 0);
 
         if (report.FreezeCount > 0)
         {
-            Console.Write($"  {"Freeze-klassificeringar",-25} ");
+            Console.Write($"  {"Freeze classifications",-25} ");
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine($"{report.FreezeCount}");
             Console.ResetColor();
@@ -534,10 +560,10 @@ public static class MonitorDisplay
             var byType = report.Events.GroupBy(e => e.EventType).OrderByDescending(g => g.Count());
 
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine($"  HÄNDELSER ({report.Events.Count} totalt: {criticalCount} kritiska, {warningCount} varningar):");
+            Console.WriteLine($"  EVENTS ({report.Events.Count} total: {criticalCount} critical, {warningCount} warnings):");
             Console.ForegroundColor = ConsoleColor.DarkGray;
 
-            Console.Write("  Fördelning: ");
+            Console.Write("  Distribution: ");
             Console.ResetColor();
             Console.WriteLine(string.Join(", ", byType.Select(g =>
             {
@@ -549,7 +575,7 @@ public static class MonitorDisplay
             foreach (var ev in report.Events)
             {
                 var color = ev.Severity == "Critical" ? ConsoleColor.Red : ConsoleColor.Yellow;
-                var label = ev.Severity == "Critical" ? "KRITISKT" : "VARNING";
+                var label = ev.Severity == "Critical" ? "CRITICAL" : "WARNING";
 
                 Console.Write($"  {ev.Timestamp:HH:mm:ss}  ");
                 Console.ForegroundColor = color;
@@ -562,7 +588,7 @@ public static class MonitorDisplay
             Console.WriteLine();
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("  ╔══════════════════════════════════════════════════════════════════╗");
-            Console.WriteLine("  ║                    REKOMMENDATIONER                             ║");
+            Console.WriteLine("  ║                     RECOMMENDATIONS                             ║");
             Console.WriteLine("  ╚══════════════════════════════════════════════════════════════════╝");
             Console.ResetColor();
             Console.WriteLine();
@@ -588,7 +614,7 @@ public static class MonitorDisplay
                 Console.ForegroundColor = headerColor;
                 Console.Write($"  {tipNum}. {tip.Label}");
                 Console.ForegroundColor = ConsoleColor.DarkGray;
-                Console.WriteLine($" ({tip.Count} händelser)");
+                Console.WriteLine($" ({tip.Count} events)");
 
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 WriteWrapped($"     {tip.Tip}", 72);
@@ -601,7 +627,7 @@ public static class MonitorDisplay
         else
         {
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("  Inga problem registrerades under övervakningen!");
+            Console.WriteLine("  No issues recorded during monitoring!");
             Console.ResetColor();
         }
     }
@@ -610,25 +636,25 @@ public static class MonitorDisplay
 
     private static readonly Dictionary<string, string> TypeLabels = new()
     {
-        ["CpuSpike"] = "CPU-spikar",
-        ["Hang"] = "UI-hängningar",
-        ["MemorySpike"] = "Minnesökningar",
+        ["CpuSpike"] = "CPU spikes",
+        ["Hang"] = "UI hangs",
+        ["MemorySpike"] = "Memory spikes",
         ["DiskBottleneck"] = "Disk I/O",
-        ["DiskLatency"] = "Disk-latens",
-        ["NetworkSpike"] = "Nätverksspikar",
-        ["PageFaultStorm"] = "Paging-stormar",
-        ["HandleLeak"] = "Handle-läckor",
-        ["GdiLeak"] = "GDI-varningar",
-        ["ThreadExplosion"] = "Tråd-explosioner",
-        ["DpcStorm"] = "DPC-stormar",
-        ["CpuThrottle"] = "CPU-throttling",
-        ["GpuSaturation"] = "GPU-mättnad",
-        ["GpuVramPressure"] = "VRAM-tryck",
+        ["DiskLatency"] = "Disk latency",
+        ["NetworkSpike"] = "Network spikes",
+        ["PageFaultStorm"] = "Paging storms",
+        ["HandleLeak"] = "Handle leaks",
+        ["GdiLeak"] = "GDI warnings",
+        ["ThreadExplosion"] = "Thread explosions",
+        ["DpcStorm"] = "DPC storms",
+        ["CpuThrottle"] = "CPU throttling",
+        ["GpuSaturation"] = "GPU saturation",
+        ["GpuVramPressure"] = "VRAM pressure",
         ["GpuTdr"] = "GPU TDR",
-        ["StorageReset"] = "Lagringsfel",
-        ["DnsLatency"] = "DNS-latens",
-        ["SchedulerContention"] = "Scheduler-trängsel",
-        ["CommitExhaustion"] = "Commit-gräns",
+        ["StorageReset"] = "Storage errors",
+        ["DnsLatency"] = "DNS latency",
+        ["SchedulerContention"] = "Scheduler contention",
+        ["CommitExhaustion"] = "Commit limit",
         ["PoolExhaustion"] = "Kernel pool"
     };
 
@@ -669,18 +695,18 @@ public static class MonitorDisplay
 
     private static string GetPressureLabel(int index) => index switch
     {
-        <= 30 => "Friskt",
-        <= 60 => "Tryck",
-        <= 80 => "Högt",
-        _ => "Kritiskt"
+        <= 30 => "Healthy",
+        <= 60 => "Pressure",
+        <= 80 => "High",
+        _ => "Critical"
     };
 
     private static string GetLatencyLabel(int score) => score switch
     {
-        <= 20 => "Responsivt",
-        <= 50 => "Viss latens",
-        <= 75 => "Hög",
-        _ => "Kritiskt"
+        <= 20 => "Responsive",
+        <= 50 => "Some latency",
+        <= 75 => "High",
+        _ => "Critical"
     };
 
     // ── Drawing helpers ──────────────────────────────────

@@ -26,7 +26,7 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
     private bool? _cachedRamMapAvailable;
     private Task? _ramMapTask; // Track running RAMMap task
 
-    // Cooldown — max 1 event per typ per 60 sek
+    // Cooldown — max 1 event per type per 60 sec
     private const int CooldownSeconds = 60;
 
     // State
@@ -136,7 +136,7 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
         var events = new List<MonitorEvent>();
         int healthScore = 100;
 
-        // 1. Page fault storm (nu baserat på PagesInput istället för PageFaults)
+        // 1. Page fault storm (now based on PagesInput instead of PageFaults)
         if (current.PagesInputPerSec > PagesInputStormThreshold)
         {
             _consecutiveHighPagesInput++;
@@ -150,17 +150,17 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
                 var topMem = current.TopMemoryProcesses.Take(3)
                     .Select(p => $"{p.Name} ({ConsoleHelper.FormatBytes(p.MemoryBytes)})")
                     .ToList();
-                string procHint = topMem.Count > 0 ? $" Störst i minnet: {string.Join(", ", topMem)}." : "";
+                string procHint = topMem.Count > 0 ? $" Largest in memory: {string.Join(", ", topMem)}." : "";
 
                 events.Add(new MonitorEvent(
                     DateTime.Now, "PageFaultStorm",
-                    $"Hård paging-storm: {current.PagesInputPerSec:F0} sidor/s läses från disk i {_consecutiveHighPagesInput * 3} sek",
+                    $"Hard paging storm: {current.PagesInputPerSec:F0} pages/s read from disk for {_consecutiveHighPagesInput * 3} sec",
                     isCritical ? "Critical" : "Warning",
-                    $"Systemet läser intensivt från sidfilen — fysiskt RAM räcker inte.{procHint} "
-                    + "ÅTGÄRDER: 1) Stäng tunga program och webbläsarflikar. "
-                    + "2) Öka sidfilen: Inställningar → System → Om → Avancerade systeminställningar → Virtuellt minne. "
-                    + "3) Om det händer ofta: uppgradera RAM. "
-                    + "4) Kontrollera att sidfilen ligger på SSD, inte HDD."));
+                    $"System is reading intensively from the page file — physical RAM is insufficient.{procHint} "
+                    + "ACTIONS: 1) Close heavy programs and browser tabs. "
+                    + "2) Increase page file: Settings → System → About → Advanced system settings → Virtual memory. "
+                    + "3) If this happens frequently: upgrade RAM. "
+                    + "4) Ensure the page file is on an SSD, not HDD."));
             }
         }
         else
@@ -184,14 +184,14 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
                 var topMem = current.TopMemoryProcesses.Take(3)
                     .Select(p => $"{p.Name} ({ConsoleHelper.FormatBytes(p.MemoryBytes)})")
                     .ToList();
-                string procList = topMem.Count > 0 ? $" Störst just nu: {string.Join(", ", topMem)}." : "";
+                string procList = topMem.Count > 0 ? $" Largest right now: {string.Join(", ", topMem)}." : "";
 
                 events.Add(new MonitorEvent(
                     DateTime.Now, "MemorySpike",
-                    $"Minnesökning: {ConsoleHelper.FormatBytes(drop)} förbrukat på 30 sek.{procList}",
+                    $"Memory growth: {ConsoleHelper.FormatBytes(drop)} consumed in 30 sec.{procList}",
                     isCritical ? "Critical" : "Warning",
-                    $"Stäng onödiga flikar i webbläsaren och tunga program du inte använder.{procList} "
-                    + "Om minnet konstant är högt: öka sidfilen eller överväg mer RAM."));
+                    $"Close unnecessary browser tabs and heavy programs you're not using.{procList} "
+                    + "If memory is constantly high: increase the page file or consider more RAM."));
             }
         }
 
@@ -211,15 +211,15 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
                     var topMem = current.TopMemoryProcesses.Take(3)
                         .Select(p => $"{p.Name} ({ConsoleHelper.FormatBytes(p.MemoryBytes)})")
                         .ToList();
-                    string procHint = topMem.Count > 0 ? $" Störst just nu: {string.Join(", ", topMem)}." : "";
+                    string procHint = topMem.Count > 0 ? $" Largest right now: {string.Join(", ", topMem)}." : "";
 
                     events.Add(new MonitorEvent(
                         DateTime.Now, "CommitExhaustion",
-                        $"Commit-gräns: {commitRatio * 100:F0}% av tillgängligt minne använt ({ConsoleHelper.FormatBytes(current.CommittedBytes)}/{ConsoleHelper.FormatBytes(current.CommitLimit)})",
+                        $"Commit limit: {commitRatio * 100:F0}% of available memory used ({ConsoleHelper.FormatBytes(current.CommittedBytes)}/{ConsoleHelper.FormatBytes(current.CommitLimit)})",
                         isCritical ? "Critical" : "Warning",
-                        $"Systemets minnesåtagande närmar sig gränsen. Om gränsen nås kan program krascha.{procHint} "
-                        + "Öka sidfilen: Systeminställningar → Avancerat → Prestanda → Virtuellt minne. "
-                        + "Stäng program du inte använder."));
+                        $"System memory commitment is approaching the limit. If the limit is reached, programs may crash.{procHint} "
+                        + "Increase page file: System Settings → Advanced → Performance → Virtual memory. "
+                        + "Close programs you're not using."));
                 }
             }
             else
@@ -246,16 +246,16 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
                     var topPool = current.SysinternalsPoolData.Take(3)
                         .Select(p => $"{p.Tag} ({ConsoleHelper.FormatBytes(p.Bytes)})")
                         .ToList();
-                    driverHint = $" Topp pool-taggar: {string.Join(", ", topPool)}.";
+                    driverHint = $" Top pool tags: {string.Join(", ", topPool)}.";
                 }
-                
+
                 events.Add(new MonitorEvent(
                     DateTime.Now, "PoolExhaustion",
-                    $"Kernel pool: Nonpaged pool är {ConsoleHelper.FormatBytes(current.PoolNonpagedBytes)}{driverHint}",
+                    $"Kernel pool: Nonpaged pool is {ConsoleHelper.FormatBytes(current.PoolNonpagedBytes)}{driverHint}",
                     isCritical ? "Critical" : "Warning",
-                    "Kernel nonpaged pool är ovanligt hög. Detta orsakas vanligen av en drivrutin som läcker minne. "
-                    + "Verktyg: Kör 'poolmon.exe' (Sysinternals) för att identifiera vilken drivrutin. "
-                    + "Uppdatera nätverks-, GPU- och lagringsdrivrutiner."));
+                    "Kernel nonpaged pool is unusually high. This is typically caused by a driver leaking memory. "
+                    + "Tool: Run 'poolmon.exe' (Sysinternals) to identify which driver. "
+                    + "Update network, GPU, and storage drivers."));
             }
         }
         else
@@ -267,7 +267,7 @@ public sealed class MemoryHealthAnalyzer : IHealthSubAnalyzer
         double confidence = history.Count >= 3 ? 1.0 : history.Count / 3.0;
 
         string? hint = healthScore < 50
-            ? "Minnestryck: systemet pagar aktivt och committed memory är högt"
+            ? "Memory pressure: system is actively paging and committed memory is high"
             : null;
 
         return new HealthAssessment(

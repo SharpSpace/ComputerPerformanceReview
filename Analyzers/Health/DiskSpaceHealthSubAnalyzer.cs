@@ -73,14 +73,14 @@ public sealed class DiskSpaceHealthSubAnalyzer : IHealthSubAnalyzer
                     events.Add(new MonitorEvent(
                         DateTime.Now,
                         "LowDiskSpace",
-                        $"KRITISKT lågt diskutrymme på {disk.DriveLetter}: endast {disk.FreePercent:F1}% ledigt ({ConsoleHelper.FormatBytes(disk.FreeBytes)} av {ConsoleHelper.FormatBytes(disk.TotalBytes)})",
+                        $"CRITICALLY low disk space on {disk.DriveLetter}: only {disk.FreePercent:F1}% free ({ConsoleHelper.FormatBytes(disk.FreeBytes)} of {ConsoleHelper.FormatBytes(disk.TotalBytes)})",
                         "Critical",
-                        $"Diskutrymmet på {disk.DriveLetter} är kritiskt lågt. ÅTGÄRDER: " +
-                        $"1) Rensa %TEMP%-filer: Öppna 'Rensa disk' (cleanmgr.exe) → Välj {disk.DriveLetter} → Kryssa i 'Temporära filer'. " +
-                        $"2) Avinstallera oanvända program: Inställningar → Appar → Installerade appar. " +
-                        $"3) Flytta stora filer till annan disk eller extern lagring. " +
-                        $"4) Töm Papperskorgen. " +
-                        $"5) Rensa webbläsarcache: I Chrome/Edge → Inställningar → Sekretess → Rensa webbläsardata."));
+                        $"Disk space on {disk.DriveLetter} is critically low. ACTIONS: " +
+                        $"1) Clean %TEMP% files: Open 'Disk Cleanup' (cleanmgr.exe) → Select {disk.DriveLetter} → Check 'Temporary files'. " +
+                        $"2) Uninstall unused programs: Settings → Apps → Installed apps. " +
+                        $"3) Move large files to another disk or external storage. " +
+                        $"4) Empty the Recycle Bin. " +
+                        $"5) Clear browser cache: In Chrome/Edge → Settings → Privacy → Clear browsing data."));
                 }
             }
             else if (disk.FreePercent < LowSpaceWarningPercent)
@@ -93,13 +93,13 @@ public sealed class DiskSpaceHealthSubAnalyzer : IHealthSubAnalyzer
                     events.Add(new MonitorEvent(
                         DateTime.Now,
                         "LowDiskSpace",
-                        $"Lågt diskutrymme på {disk.DriveLetter}: {disk.FreePercent:F1}% ledigt ({ConsoleHelper.FormatBytes(disk.FreeBytes)} av {ConsoleHelper.FormatBytes(disk.TotalBytes)})",
+                        $"Low disk space on {disk.DriveLetter}: {disk.FreePercent:F1}% free ({ConsoleHelper.FormatBytes(disk.FreeBytes)} of {ConsoleHelper.FormatBytes(disk.TotalBytes)})",
                         "Warning",
-                        $"Diskutrymmet på {disk.DriveLetter} börjar bli lågt. TIPS: " +
-                        $"1) Kör 'Rensa disk' (cleanmgr.exe) för att ta bort temporära filer. " +
-                        $"2) Kontrollera stora filer: Öppna Inställningar → System → Lagring → Visa användning per kategori. " +
-                        $"3) Töm Papperskorgen och nedladdningar-mappen. " +
-                        $"4) Rensa gamla Windows.old-mappar via 'Rensa disk' → 'Rensa systemfiler'."));
+                        $"Disk space on {disk.DriveLetter} is getting low. TIPS: " +
+                        $"1) Run 'Disk Cleanup' (cleanmgr.exe) to remove temporary files. " +
+                        $"2) Check large files: Open Settings → System → Storage → View usage by category. " +
+                        $"3) Empty the Recycle Bin and Downloads folder. " +
+                        $"4) Clean old Windows.old folders via 'Disk Cleanup' → 'Clean up system files'."));
                 }
             }
         }
@@ -117,7 +117,7 @@ public sealed class DiskSpaceHealthSubAnalyzer : IHealthSubAnalyzer
         double confidence = history.Count >= 2 ? 1.0 : history.Count / 2.0;
 
         string? hint = healthScore < 70
-            ? "Diskutrymme lågt på en eller flera volymer"
+            ? "Disk space low on one or more volumes"
             : null;
 
         return new HealthAssessment(

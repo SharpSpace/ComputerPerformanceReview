@@ -19,15 +19,26 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
+          include-prerelease: true   # required — .NET 10 is still preview
 
       - name: Restore
         run: dotnet restore
 
       - name: Publish
-        run: dotnet publish ./ComputerPerformanceReview.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=false -o ./artifacts
+        run: >
+          dotnet publish ./ComputerPerformanceReview.csproj
+          -c Release
+          -r win-x64
+          -p:PublishSingleFile=true
+          -p:SelfContained=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o ./artifacts
+        # SelfContained=true  — bundles the .NET runtime; no installation needed on target machine
+        # IncludeNativeLibrariesForSelfExtract=true — bundles SkiaSharp/HarfBuzz native DLLs
+        #   inside the single exe (extracted to %TEMP% on first run)
 
       - name: Package
-        run: Compress-Archive -Path ./artifacts/* -DestinationPath ./ComputerPerformanceReview-win-x64.zip
+        run: Compress-Archive -Path ./artifacts/* -DestinationPath ./ComputerPerformanceReview-win-x64.zip -Force
 
       - name: Release
         uses: softprops/action-gh-release@v2

@@ -1,7 +1,7 @@
 namespace ComputerPerformanceReview.Models;
 
 /// <summary>
-/// Klassificering av varför en process hänger sig, baserat på systemets tillstånd.
+/// Classification of why a process is hanging, based on the system state.
 /// </summary>
 public sealed record FreezeClassification(
     string ProcessName,

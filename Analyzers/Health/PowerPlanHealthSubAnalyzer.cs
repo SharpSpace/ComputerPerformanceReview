@@ -96,14 +96,14 @@ public sealed class PowerPlanHealthSubAnalyzer : IHealthSubAnalyzer
                 events.Add(new MonitorEvent(
                     DateTime.Now,
                     "PowerSaverMode",
-                    $"Energisparläge aktivt: '{current.ActivePowerPlan}' kan begränsa CPU-prestanda",
+                    $"Power saver mode active: '{current.ActivePowerPlan}' may limit CPU performance",
                     "Warning",
-                    $"Du kör energisparläge på stationär dator eller nätström. Detta sänker CPU-frekvensen och kan göra systemet långsammare. " +
-                    $"ÅTGÄRDER: " +
-                    $"1) Öppna Energialternativ: Sök efter 'Energischema' i Start-menyn. " +
-                    $"2) Välj 'Balanserad' eller 'Hög prestanda' istället. " +
-                    $"3) Eller tryck Win+X → Energialternativ → Välj ett prestandaläge. " +
-                    $"4) Alternativt kör: powercfg.exe /setactive SCHEME_BALANCED i administratörsläge."));
+                    $"You are running power saver mode on a desktop computer or AC power. This lowers CPU frequency and can make the system slower. " +
+                    $"ACTIONS: " +
+                    $"1) Open Power Options: Search for 'Power Plan' in the Start menu. " +
+                    $"2) Select 'Balanced' or 'High performance' instead. " +
+                    $"3) Or press Win+X → Power Options → Select a performance mode. " +
+                    $"4) Alternatively run: powercfg.exe /setactive SCHEME_BALANCED in administrator mode."));
             }
         }
 
@@ -111,7 +111,7 @@ public sealed class PowerPlanHealthSubAnalyzer : IHealthSubAnalyzer
         double confidence = history.Count >= 2 ? 1.0 : history.Count / 2.0;
 
         string? hint = healthScore < 80
-            ? $"Energisparläge kan begränsa prestanda"
+            ? $"Power saver mode may limit performance"
             : null;
 
         return new HealthAssessment(

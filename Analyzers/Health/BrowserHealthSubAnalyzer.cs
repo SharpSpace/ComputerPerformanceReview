@@ -79,20 +79,20 @@ public sealed class BrowserHealthSubAnalyzer : IHealthSubAnalyzer
                     .ToList();
 
                 string procHint = browserProcs.Count > 0
-                    ? $" Webbläsare: {string.Join(", ", browserProcs.Select(p => $"{p.Name} ({ConsoleHelper.FormatBytes(p.MemoryBytes)})"))}."
+                    ? $" Browsers: {string.Join(", ", browserProcs.Select(p => $"{p.Name} ({ConsoleHelper.FormatBytes(p.MemoryBytes)})"))}."
                     : "";
 
                 events.Add(new MonitorEvent(
                     DateTime.Now,
                     "HighBrowserUsage",
-                    $"Många webbläsarprocesser: {current.BrowserProcessCount} processer använder totalt {ConsoleHelper.FormatBytes(current.BrowserMemoryBytes)}{procHint}",
+                    $"Many browser processes: {current.BrowserProcessCount} processes using {ConsoleHelper.FormatBytes(current.BrowserMemoryBytes)} total{procHint}",
                     isCritical ? "Critical" : "Warning",
-                    $"Många öppna webbläsarflikar eller extensioner belastar systemet. ÅTGÄRDER: " +
-                    $"1) Stäng oanvända flikar: Ctrl+W för att stänga aktuell flik. " +
-                    $"2) Använd 'Tab Suspender' eller 'The Great Suspender' extension för att automatiskt avlasta inaktiva flikar. " +
-                    $"3) Inaktivera tunga extensioner: chrome://extensions eller edge://extensions → Stäng av oanvända. " +
-                    $"4) Använd 'Shift+Esc' i Chrome/Edge för att se Aktivitetshanteraren och identifiera tunga flikar. " +
-                    $"5) Överväg att använda flera webbläsarprofiler för att separera arbete/privat."));
+                    $"Many open browser tabs or extensions are straining the system. ACTIONS: " +
+                    $"1) Close unused tabs: Ctrl+W to close the current tab. " +
+                    $"2) Use 'Tab Suspender' or 'The Great Suspender' extension to automatically suspend inactive tabs. " +
+                    $"3) Disable heavy extensions: chrome://extensions or edge://extensions → Turn off unused ones. " +
+                    $"4) Use 'Shift+Esc' in Chrome/Edge to open the Task Manager and identify heavy tabs. " +
+                    $"5) Consider using multiple browser profiles to separate work/personal."));
             }
         }
         // Check for high browser memory even with fewer processes
@@ -106,13 +106,13 @@ public sealed class BrowserHealthSubAnalyzer : IHealthSubAnalyzer
                 events.Add(new MonitorEvent(
                     DateTime.Now,
                     "HighBrowserMemory",
-                    $"Webbläsare använder mycket minne: {ConsoleHelper.FormatBytes(current.BrowserMemoryBytes)} över {current.BrowserProcessCount} processer",
+                    $"Browser using a lot of memory: {ConsoleHelper.FormatBytes(current.BrowserMemoryBytes)} across {current.BrowserProcessCount} processes",
                     "Warning",
-                    $"Webbläsaren använder ovanligt mycket minne. TIPS: " +
-                    $"1) Tryck Shift+Esc i Chrome/Edge för att se vilka flikar som använder mest minne. " +
-                    $"2) Stäng tunga flikar eller ladda om dem för att frigöra minne. " +
-                    $"3) Rensa webbläsarcache: Inställningar → Sekretess → Rensa webbläsardata. " +
-                    $"4) Inaktivera hårdvaruacceleration om problem kvarstår: Inställningar → System → Stäng av 'Använd maskinvaruacceleration'."));
+                    $"Browser is using an unusually large amount of memory. TIPS: " +
+                    $"1) Press Shift+Esc in Chrome/Edge to see which tabs use the most memory. " +
+                    $"2) Close heavy tabs or reload them to free memory. " +
+                    $"3) Clear browser cache: Settings → Privacy → Clear browsing data. " +
+                    $"4) Disable hardware acceleration if the problem persists: Settings → System → Turn off 'Use hardware acceleration'."));
             }
         }
 
@@ -120,7 +120,7 @@ public sealed class BrowserHealthSubAnalyzer : IHealthSubAnalyzer
         double confidence = history.Count >= 2 ? 1.0 : history.Count / 2.0;
 
         string? hint = healthScore < 80
-            ? "Webbläsaren använder mycket resurser"
+            ? "Browser is using a lot of resources"
             : null;
 
         return new HealthAssessment(

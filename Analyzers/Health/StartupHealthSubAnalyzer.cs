@@ -55,15 +55,15 @@ public sealed class StartupHealthSubAnalyzer : IHealthSubAnalyzer
             events.Add(new MonitorEvent(
                 DateTime.Now,
                 "HighStartupCount",
-                $"Många startprogram: {_cachedStartupCount} program startar automatiskt vid inloggning",
+                $"Many startup programs: {_cachedStartupCount} programs start automatically at login",
                 "Critical",
-                $"För många program startar automatiskt, vilket förlänger uppstartstiden och belastar systemet. " +
-                $"ÅTGÄRDER: " +
-                $"1) Öppna Aktivitetshanteraren: Ctrl+Shift+Esc → Fliken 'Autostart'. " +
-                $"2) Högerklicka på program du inte behöver vid start → Välj 'Inaktivera'. " +
-                $"3) Fokusera på: Uppdateringstjänster (Adobe, Java), launcherprogramvara (Steam, Origin, Discord), moln-sync (OneDrive, Dropbox). " +
-                $"4) Behåll bara kritiska program: Antivirusprogram, drivrutiner för kringutrustning. " +
-                $"5) Program kan fortfarande startas manuellt när du behöver dem."));
+                $"Too many programs start automatically, which lengthens boot time and strains the system. " +
+                $"ACTIONS: " +
+                $"1) Open Task Manager: Ctrl+Shift+Esc → 'Startup' tab. " +
+                $"2) Right-click programs you don't need at startup → Select 'Disable'. " +
+                $"3) Focus on: Update services (Adobe, Java), launcher software (Steam, Origin, Discord), cloud sync (OneDrive, Dropbox). " +
+                $"4) Keep only critical programs: Antivirus, peripheral drivers. " +
+                $"5) Programs can still be started manually when you need them."));
         }
         else if (_cachedStartupCount > 15)
         {
@@ -71,17 +71,17 @@ public sealed class StartupHealthSubAnalyzer : IHealthSubAnalyzer
             events.Add(new MonitorEvent(
                 DateTime.Now,
                 "ModerateStartupCount",
-                $"Flera startprogram: {_cachedStartupCount} program startar automatiskt",
+                $"Several startup programs: {_cachedStartupCount} programs start automatically",
                 "Warning",
-                $"Flera program startar automatiskt. Överväg att inaktivera oanvända. " +
-                $"TIPS: Öppna Aktivitetshanteraren (Ctrl+Shift+Esc) → Autostart-fliken → Inaktivera program du inte behöver direkt vid start."));
+                $"Several programs start automatically. Consider disabling unused ones. " +
+                $"TIPS: Open Task Manager (Ctrl+Shift+Esc) → Startup tab → Disable programs you don't need at startup."));
         }
 
         healthScore = Math.Clamp(healthScore, 0, 100);
         double confidence = _cachedStartupCount > 0 ? 1.0 : 0.0;
 
         string? hint = healthScore < 85
-            ? $"{_cachedStartupCount} startprogram kan fördröja uppstart"
+            ? $"{_cachedStartupCount} startup programs may delay boot"
             : null;
 
         return new HealthAssessment(

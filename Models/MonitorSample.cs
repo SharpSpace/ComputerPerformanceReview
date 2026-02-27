@@ -38,6 +38,7 @@ public sealed record MonitorSample(
     long GpuDedicatedLimitBytes = 0,
     double DnsLatencyMs = 0,
     int StorageErrorsLast15Min = 0,
+    List<StorageErrorDetail>? StorageErrorDetails = null,
     int TdrEventsLast15Min = 0,
     int MemoryPressureIndex = 0,
     int SystemLatencyScore = 0,
@@ -70,7 +71,20 @@ public sealed record MonitorProcessInfo(
 
 public sealed record MonitorIoProcessInfo(string Name, int Pid, ulong ReadBytes, ulong WriteBytes, ulong TotalBytes);
 public sealed record MonitorFaultProcessInfo(string Name, int Pid, double PageFaultsPerSec);
-public sealed record DiskInstanceStat(string Name, double QueueLength, double ReadLatencyMs, double WriteLatencyMs, double BusyPercent);
+public sealed record DiskInstanceStat(
+    string Name,
+    double QueueLength,
+    double ReadLatencyMs,
+    double WriteLatencyMs,
+    double BusyPercent,
+    double IdlePercent = 0,
+    double ReadIops = 0,
+    double WriteIops = 0,
+    double ReadBytesPerSec = 0,
+    double WriteBytesPerSec = 0
+);
+
+public sealed record StorageErrorDetail(DateTime Timestamp, int EventId, string Source, string Message);
 
 /// <summary>
 /// Sysinternals Handle.exe data for a process

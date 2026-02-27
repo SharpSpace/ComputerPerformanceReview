@@ -27,7 +27,7 @@ public static class WmiHelper
         }
         catch (Exception ex)
         {
-            ConsoleHelper.WriteWarning($"WMI-fråga misslyckades: {ex.Message}");
+            ConsoleHelper.WriteWarning($"WMI query failed: {ex.Message}");
         }
         return results;
     }

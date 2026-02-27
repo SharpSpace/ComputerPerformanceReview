@@ -17,6 +17,7 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
 
     private DateTime _lastStoragePoll = DateTime.MinValue;
     private int _cachedStorageErrors;
+    private List<StorageErrorDetail>? _cachedStorageErrorDetails;
 
     // Sysinternals DiskExt integration
     private DateTime _lastDiskExtRun = DateTime.MinValue;
@@ -29,7 +30,8 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
         try
         {
             var allDisks = WmiHelper.Query(
-                "SELECT Name, CurrentDiskQueueLength, AvgDiskSecPerRead, AvgDiskSecPerWrite, PercentDiskTime " +
+                "SELECT Name, CurrentDiskQueueLength, AvgDiskSecPerRead, AvgDiskSecPerWrite, PercentDiskTime, " +
+                "PercentIdleTime, DiskReadsPerSec, DiskWritesPerSec, DiskReadBytesPerSec, DiskWriteBytesPerSec " +
                 "FROM Win32_PerfFormattedData_PerfDisk_PhysicalDisk");
 
             if (allDisks.Count > 0)
@@ -37,11 +39,16 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
                 var instances = new List<DiskInstanceStat>();
                 foreach (var disk in allDisks)
                 {
-                    string name = WmiHelper.GetValue<string>(disk, "Name") ?? "Okänd";
+                    string name = WmiHelper.GetValue<string>(disk, "Name") ?? "Unknown";
                     double queue = WmiHelper.GetValue<double>(disk, "CurrentDiskQueueLength");
                     double readSec = WmiHelper.GetValue<double>(disk, "AvgDiskSecPerRead");
                     double writeSec = WmiHelper.GetValue<double>(disk, "AvgDiskSecPerWrite");
                     double busy = WmiHelper.GetValue<double>(disk, "PercentDiskTime");
+                    double idle = WmiHelper.GetValue<double>(disk, "PercentIdleTime");
+                    double readIops = WmiHelper.GetValue<double>(disk, "DiskReadsPerSec");
+                    double writeIops = WmiHelper.GetValue<double>(disk, "DiskWritesPerSec");
+                    double readBytes = WmiHelper.GetValue<double>(disk, "DiskReadBytesPerSec");
+                    double writeBytes = WmiHelper.GetValue<double>(disk, "DiskWriteBytesPerSec");
 
                     if (name.Equals("_Total", StringComparison.OrdinalIgnoreCase))
                     {
@@ -51,22 +58,26 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
                     }
                     else if (!name.StartsWith("HarddiskVolume", StringComparison.OrdinalIgnoreCase))
                     {
-                        instances.Add(new DiskInstanceStat(name, queue, readSec * 1000, writeSec * 1000, busy));
+                        instances.Add(new DiskInstanceStat(name, queue, readSec * 1000, writeSec * 1000, busy,
+                            idle, readIops, writeIops, readBytes, writeBytes));
                     }
                 }
 
-                builder.DiskInstances = instances.OrderByDescending(d => Math.Max(d.ReadLatencyMs, d.WriteLatencyMs)).Take(6).ToList();
+                builder.DiskInstances = instances.OrderByDescending(DiskSeverityScore).Take(6).ToList();
             }
         }
         catch { }
 
         if (DateTime.UtcNow - _lastStoragePoll > TimeSpan.FromMinutes(1))
         {
-            _cachedStorageErrors = QueryRecentStorageErrors(15);
+            var (count, details) = QueryRecentStorageErrorsWithDetails(15);
+            _cachedStorageErrors = count;
+            _cachedStorageErrorDetails = details;
             _lastStoragePoll = DateTime.UtcNow;
         }
 
         builder.StorageErrorsLast15Min = _cachedStorageErrors;
+        builder.StorageErrorDetails = _cachedStorageErrorDetails;
 
         if (!string.IsNullOrWhiteSpace(_cachedDiskExtOutput))
             builder.SysinternalsDiskExtOutput = _cachedDiskExtOutput;
@@ -99,7 +110,7 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
         int healthScore = 100;
 
         var worstDisk = current.DiskInstances
-            .OrderByDescending(d => Math.Max(d.ReadLatencyMs, d.WriteLatencyMs))
+            .OrderByDescending(DiskSeverityScore)
             .FirstOrDefault();
 
         if (current.DiskQueueLength > DiskQueueThreshold)
@@ -112,14 +123,14 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
                 events.Add(new MonitorEvent(
                     DateTime.Now,
                     "DiskBottleneck",
-                    $"Disk I/O-flaskhals: kölängd {current.DiskQueueLength:F1} i {_consecutiveHighDiskQueue * 3} sekunder",
+                    $"Disk I/O bottleneck: queue length {current.DiskQueueLength:F1} for {_consecutiveHighDiskQueue * 3} seconds",
                     isCritical ? "Critical" : "Warning",
-                    "Disken är överbelastad med I/O-förfrågningar vilket ger långsam respons. ÅTGÄRDER: " +
-                    "1) Identifiera tung I/O: " + GetTopIoHint(current) +
-                    "2) Stäng tunga nedladdningar, backup-jobb eller filsynkronisering (OneDrive, Dropbox). " +
-                    "3) Om HDD: Uppgradera till SSD för systemdisken (C:). " +
-                    "4) Flytta stora spel/program till separat SSD. " +
-                    "5) Kontrollera diskhälsa: Kör 'wmic diskdrive get status' i Kommandotolken — alla diskar ska visa 'OK'. " +
+                    "The disk is overloaded with I/O requests causing slow response. ACTIONS: " +
+                    "1) Identify heavy I/O: " + GetTopIoHint(current) +
+                    "2) Close heavy downloads, backup jobs or file sync (OneDrive, Dropbox). " +
+                    "3) If HDD: Upgrade to SSD for the system disk (C:). " +
+                    "4) Move large games/programs to a separate SSD. " +
+                    "5) Check disk health: Run 'wmic diskdrive get status' in Command Prompt — all disks should show 'OK'. " +
                     GetWorstDiskHint(worstDisk)));
             }
         }
@@ -140,14 +151,14 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
                 events.Add(new MonitorEvent(
                     DateTime.Now,
                     "DiskLatency",
-                    $"Disk-latens: Läs {current.AvgDiskSecRead * 1000:F1}ms, Skriv {current.AvgDiskSecWrite * 1000:F1}ms",
+                    $"Disk latency: Read {current.AvgDiskSecRead * 1000:F1}ms, Write {current.AvgDiskSecWrite * 1000:F1}ms",
                     isCritical ? "Critical" : "Warning",
-                    $"Diskens svarstid är hög ({maxLatencyMs:F0}ms) vilket ger seg systemrespons. ÅTGÄRDER: " +
-                    "1) Identifiera I/O-belastning: " + GetTopIoHint(current) +
-                    "2) Om HDD: Uppgradera till SSD för markant bättre latens (<1ms istället för 10-20ms). " +
-                    "3) Kör diskkontroll: Öppna Kommandotolken som admin → Kör 'chkdsk C: /F /R' (ersätt C: med aktuell disk) → Acceptera omstart. " +
-                    "4) Kontrollera SMART-status: Använd verktyg som CrystalDiskInfo för att se diskhälsa. " +
-                    "5) Avaktivera Windows Search-indexering temporärt: services.msc → Windows Search → Stoppa. " +
+                    $"Disk response time is high ({maxLatencyMs:F0}ms) causing sluggish system response. ACTIONS: " +
+                    "1) Identify I/O load: " + GetTopIoHint(current) +
+                    "2) If HDD: Upgrade to SSD for significantly better latency (<1ms instead of 10-20ms). " +
+                    "3) Run disk check: Open Command Prompt as admin → Run 'chkdsk C: /F /R' (replace C: with the current disk) → Accept restart. " +
+                    "4) Check SMART status: Use tools like CrystalDiskInfo to check disk health. " +
+                    "5) Disable Windows Search indexing temporarily: services.msc → Windows Search → Stop. " +
                     GetWorstDiskHint(worstDisk)));
             }
         }
@@ -159,26 +170,34 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
         if (current.StorageErrorsLast15Min > 0)
         {
             healthScore -= current.StorageErrorsLast15Min > 5 ? 30 : 15;
+
+            string detailSuffix = "";
+            if (current.StorageErrorDetails is { Count: > 0 })
+            {
+                var latest = current.StorageErrorDetails[0];
+                detailSuffix = $" Latest: [{latest.Source}] Event {latest.EventId}: {latest.Message}";
+            }
+
             events.Add(new MonitorEvent(
                 DateTime.Now,
                 "StorageReset",
-                $"Lagringsfel i systemloggen: {current.StorageErrorsLast15Min} senaste 15 min",
+                $"Storage errors in system log: {current.StorageErrorsLast15Min} in last 15 min.{detailSuffix}",
                 current.StorageErrorsLast15Min > 5 ? "Critical" : "Warning",
-                "Disk/controller rapporterar fel eller timeout (Event ID 129/153/7/51) vilket kan tyda på hårdvaruproblem. " +
-                "ÅTGÄRDER: " +
-                "1) Kontrollera SMART-status: Ladda ner CrystalDiskInfo och se diskhälsa — 'Caution' eller 'Bad' indikerar diskfel. " +
-                "2) Uppdatera lagringsdrivrutiner: Enhetshanteraren → IDE ATA/ATAPI-styrenheter → Högerklicka → Uppdatera drivrutin. " +
-                "3) Kontrollera kablar: Byt SATA-kabel eller kontrollera M.2-kontakten. " +
-                "4) Kör diskkontroll: chkdsk C: /F /R i Kommandotolken som admin. " +
-                "5) Uppdatera disk/controller-firmware från tillverkarens webbplats. " +
-                "6) Om problemen kvarstår: Backa upp data omedelbart — disken kan vara på väg att gå sönder."));
+                "Disk/controller is reporting errors or timeouts (Event ID 129/153/7/51) which may indicate hardware problems. " +
+                "ACTIONS: " +
+                "1) Check SMART status: Download CrystalDiskInfo and check disk health — 'Caution' or 'Bad' indicates disk failure. " +
+                "2) Update storage drivers: Device Manager → IDE ATA/ATAPI controllers → Right-click → Update driver. " +
+                "3) Check cables: Replace SATA cable or check M.2 connector. " +
+                "4) Run disk check: chkdsk C: /F /R in Command Prompt as admin. " +
+                "5) Update disk/controller firmware from the manufacturer's website. " +
+                "6) If problems persist: Back up data immediately — the disk may be failing."));
         }
 
         healthScore = Math.Clamp(healthScore, 0, 100);
         double confidence = history.Count >= 3 ? 1.0 : history.Count / 3.0;
 
         string? hint = maxLatencyMs > DiskLatencyWarningMs
-            ? "Hög disklatens: I/O-operationer tar för lång tid"
+            ? "High disk latency: I/O operations are taking too long"
             : null;
 
         return new HealthAssessment(new HealthScore(Domain, healthScore, confidence, hint), events);
@@ -202,12 +221,12 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
     private static string GetTopIoHint(MonitorSample sample)
     {
         if (sample.TopIoProcesses.Count == 0)
-            return "Ingen I/O-process kunde identifieras i detta sample. ";
+            return "No I/O process could be identified in this sample. ";
 
         var top = sample.TopIoProcesses.Take(3)
             .Select(proc => $"{proc.Name} ({ConsoleHelper.FormatBytes((long)proc.TotalBytes)})");
 
-        return $"Största I/O-processer: {string.Join(", ", top)}. ";
+        return $"Top I/O processes: {string.Join(", ", top)}. ";
     }
 
     private static string GetWorstDiskHint(DiskInstanceStat? disk)
@@ -215,11 +234,27 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
         if (disk is null)
             return string.Empty;
 
-        return $"Värst disk: {disk.Name} (R {disk.ReadLatencyMs:F1}ms, W {disk.WriteLatencyMs:F1}ms, kö {disk.QueueLength:F1}, busy {disk.BusyPercent:F0}%).";
+        double totalIops = disk.ReadIops + disk.WriteIops;
+        string readTp = ConsoleHelper.FormatBytes((long)disk.ReadBytesPerSec) + "/s";
+        string writeTp = ConsoleHelper.FormatBytes((long)disk.WriteBytesPerSec) + "/s";
+
+        return $"Worst disk: {disk.Name} (R {disk.ReadLatencyMs:F1}ms, W {disk.WriteLatencyMs:F1}ms, " +
+               $"queue {disk.QueueLength:F1}, IOPS {totalIops:F0}, R {readTp} W {writeTp}, idle {disk.IdlePercent:F0}%).";
     }
 
-    private static int QueryRecentStorageErrors(int windowMinutes)
+    /// <summary>
+    /// Composite score for ranking disk instances by severity.
+    /// Higher score = worse performance.
+    /// </summary>
+    internal static double DiskSeverityScore(DiskInstanceStat d) =>
+        Math.Max(d.ReadLatencyMs, d.WriteLatencyMs) * 10
+        + (100 - d.IdlePercent)
+        + d.QueueLength * 5
+        + (d.ReadIops + d.WriteIops) / 100.0;
+
+    private static (int Count, List<StorageErrorDetail> Details) QueryRecentStorageErrorsWithDetails(int windowMinutes)
     {
+        var details = new List<StorageErrorDetail>();
         try
         {
             string xPath = "*[System[(Level=2 or Level=3) and "
@@ -238,16 +273,31 @@ public sealed class DiskHealthAnalyzer : IHealthSubAnalyzer
                 using (rec)
                 {
                     count++;
+                    if (details.Count < 10)
+                    {
+                        string message;
+                        try { message = rec.FormatDescription() ?? "No description"; }
+                        catch { message = "No description"; }
+
+                        if (message.Length > 120)
+                            message = message[..120] + "...";
+
+                        details.Add(new StorageErrorDetail(
+                            rec.TimeCreated ?? DateTime.Now,
+                            rec.Id,
+                            rec.ProviderName ?? "Unknown",
+                            message));
+                    }
                     if (count >= 50)
                         break;
                 }
             }
 
-            return count;
+            return (count, details);
         }
         catch
         {
-            return 0;
+            return (0, details);
         }
     }
 }

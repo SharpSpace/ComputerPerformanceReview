@@ -4,8 +4,8 @@ using System.Net.NetworkInformation;
 namespace ComputerPerformanceReview.Analyzers.Health;
 
 /// <summary>
-/// Orkestrerar alla sub-analyzers, beräknar composite scores och aggregerar hälsodata.
-/// Ersätter den monolitiska CollectSample/DetectEvents-logiken i MonitorAnalyzer.
+/// Orchestrates all sub-analyzers, calculates composite scores and aggregates health data.
+/// Replaces the monolithic CollectSample/DetectEvents logic in MonitorAnalyzer.
 /// </summary>
 public sealed class SystemHealthEngine
 {
@@ -13,7 +13,7 @@ public sealed class SystemHealthEngine
     private readonly ProcessHealthAnalyzer _processAnalyzer;
     private readonly List<MonitorSample> _history = [];
 
-    // Network throughput tracking (enkel, ingen sub-analyzer behövs)
+    // Network throughput tracking (simple, no sub-analyzer needed)
     private long _prevNetworkBytesTotal;
     private DateTime _prevNetworkTime = DateTime.MinValue;
 
@@ -22,36 +22,44 @@ public sealed class SystemHealthEngine
     private const int NetworkSpikeConsecutive = 2;
     private int _consecutiveHighNetwork;
 
-    // Tracking for report
-    private readonly List<double> _cpuSamples = [];
-    private readonly List<double> _memorySamples = [];
-    private readonly List<double> _diskQueueSamples = [];
-    private readonly List<double> _networkSamples = [];
-    private readonly List<long> _handleSamples = [];
-    private readonly List<double> _pageFaultSamples = [];
-    private readonly List<long> _committedBytesSamples = [];
-    private readonly List<double> _pagesInputSamples = [];
-    private readonly List<double> _dpcTimeSamples = [];
-    private readonly List<double> _interruptTimeSamples = [];
-    private readonly List<double> _contextSwitchSamples = [];
-    private readonly List<int> _procQueueSamples = [];
-    private readonly List<double> _diskSecReadSamples = [];
-    private readonly List<double> _diskSecWriteSamples = [];
-    private readonly List<long> _poolNonpagedSamples = [];
-    private readonly List<long> _poolPagedSamples = [];
-    private readonly List<int> _memPressureSamples = [];
-    private readonly List<int> _latencyScoreSamples = [];
-    private readonly List<double> _gpuUtilSamples = [];
-    private readonly List<double> _dnsLatencySamples = [];
-    private readonly List<int> _storageErrorSamples = [];
+    // Compact running statistics — replace 22 unbounded List<T> fields.
+    // RunningStat holds a running count/sum/max with zero heap allocation per sample.
+    private const int MaxHistory = 20;   // ~60 s of context at 3 s/sample
+    private const int MaxEvents  = 500;  // generous cap for multi-hour sessions
+
+    private RunningStat     _cpuStat;
+    private RunningStat     _memoryStat;
+    private RunningStat     _diskQueueStat;
+    private RunningStat     _networkStat;
+    private RunningStatLong _handleStat;
+    private RunningStat     _pageFaultStat;
+    private RunningStatLong _committedBytesStat;
+    private RunningStat     _pagesInputStat;
+    private RunningStat     _dpcTimeStat;
+    private RunningStat     _interruptTimeStat;
+    private RunningStat     _contextSwitchStat;
+    private RunningStatInt  _procQueueStat;
+    private RunningStat     _diskSecReadStat;
+    private RunningStat     _diskSecWriteStat;
+    private RunningStatLong _poolNonpagedStat;
+    private RunningStatLong _poolPagedStat;
+    private RunningStatInt  _memPressureStat;
+    private RunningStatInt  _latencyScoreStat;
+    private RunningStat     _gpuUtilStat;
+    private RunningStat     _dnsLatencyStat;
+    private RunningStatInt  _storageErrorStat;
     private int _freezeCount;
 
     // Sysinternals ProcDump integration
     private DateTime _lastProcDumpRun = DateTime.MinValue;
     private const int ProcDumpCooldownSeconds = 300; // Run ProcDump at most every 5 minutes
     private string? _cachedProcDumpPath;
+    private string? _lastReportedProcDumpPath; // tracks which dump we already emitted an event for
     private MiniDumpAnalysis? _cachedProcDumpAnalysis;
     private Task? _procDumpTask;
+
+    // Event deduplication: key = EventType, value = (index into AllEvents, time first fired)
+    private readonly Dictionary<string, (int Idx, DateTime FirstFired)> _activeEvents = new();
 
     public List<MonitorEvent> AllEvents { get; } = [];
 
@@ -75,19 +83,19 @@ public sealed class SystemHealthEngine
     }
 
     /// <summary>
-    /// Samlar in all data, beräknar composite scores, kör freeze detector, returnerar ett komplett sample.
+    /// Collects all data, calculates composite scores, runs freeze detector, returns a complete sample.
     /// </summary>
     public MonitorSample CollectAndAnalyze()
     {
-        // 1. Collect — varje sub-analyzer fyller sina fält i buildern
+        // 1. Collect — each sub-analyzer fills its fields in the builder
         var builder = new MonitorSampleBuilder();
         foreach (var analyzer in _analyzers)
             analyzer.Collect(builder);
 
-        // 2. Network (enkel, ingen sub-analyzer)
+        // 2. Network (simple, no sub-analyzer)
         builder.NetworkMbps = CollectNetworkMbps();
 
-        // 3. Build intermediate sample (utan composite scores)
+        // 3. Build intermediate sample (without composite scores)
         var rawSample = builder.Build();
 
         // 4. Compute composite scores
@@ -101,7 +109,7 @@ public sealed class SystemHealthEngine
         if (_cachedProcDumpAnalysis is not null)
             builder.SysinternalsProcDumpAnalysis = _cachedProcDumpAnalysis;
 
-        // 5. Freeze detector — klassificera varje hängande process
+        // 5. Freeze detector — classify each hanging process
         FreezeClassification? freezeInfo = null;
         FreezeReport? deepFreezeReport = null;
         var sampleWithScores = builder.Build();
@@ -175,22 +183,94 @@ public sealed class SystemHealthEngine
 
         var finalSample = builder.Build();
 
-        // 6. Analyze — varje sub-analyzer genererar events baserat på sample + historik
+        // 6. Analyze — each sub-analyzer generates events based on sample + history
+        // Deduplicate: one live event per EventType; update duration, resolve when gone
+        var firedTypes = new HashSet<string>();
         foreach (var analyzer in _analyzers)
         {
             var assessment = analyzer.Analyze(finalSample, _history);
-            if (assessment.NewEvents.Count > 0)
-                AllEvents.AddRange(assessment.NewEvents);
+            foreach (var ev in assessment.NewEvents)
+            {
+                // Hang events are managed by UpdateHangingEvents below — don't deduplicate them
+                if (ev.EventType == "Hang")
+                {
+                    if (AllEvents.Count < MaxEvents) AllEvents.Add(ev);
+                    continue;
+                }
+
+                firedTypes.Add(ev.EventType);
+
+                if (!_activeEvents.TryGetValue(ev.EventType, out var active))
+                {
+                    // First occurrence of this event type
+                    if (AllEvents.Count < MaxEvents)
+                    {
+                        AllEvents.Add(ev);
+                        _activeEvents[ev.EventType] = (AllEvents.Count - 1, ev.Timestamp);
+                    }
+                }
+                else
+                {
+                    // Already active — update the existing event with an "ongoing" duration note
+                    var durSec = (int)(DateTime.Now - active.FirstFired).TotalSeconds;
+                    var existing = AllEvents[active.Idx];
+                    string baseDesc = StripStatusSuffix(existing.Description);
+                    AllEvents[active.Idx] = existing with
+                    {
+                        Description = durSec >= 6
+                            ? $"{baseDesc} (ongoing {durSec}s)"
+                            : baseDesc
+                    };
+                }
+            }
         }
 
-        // 7. Network spike detection (enkel)
+        // Resolve event types that no longer fire this cycle
+        foreach (var key in _activeEvents.Keys.ToList())
+        {
+            if (!firedTypes.Contains(key))
+            {
+                var active = _activeEvents[key];
+                var durSec = (int)(DateTime.Now - active.FirstFired).TotalSeconds;
+                var existing = AllEvents[active.Idx];
+                string baseDesc = StripStatusSuffix(existing.Description);
+                AllEvents[active.Idx] = existing with
+                {
+                    Description = durSec >= 6
+                        ? $"{baseDesc} (resolved after {durSec}s)"
+                        : baseDesc
+                };
+                _activeEvents.Remove(key);
+            }
+        }
+
+        // 7. Network spike detection (simple)
         DetectNetworkSpike(finalSample);
 
         // 8. Update hanging events with live duration and freeze info
         UpdateHangingEvents(finalSample);
 
-        // 9. Track history and samples for report
-        _history.Add(finalSample);
+        // 9. ProcDump event — emit once when a new dump file arrives from the background task
+        if (_cachedProcDumpPath is not null && _cachedProcDumpPath != _lastReportedProcDumpPath)
+        {
+            _lastReportedProcDumpPath = _cachedProcDumpPath;
+            if (AllEvents.Count < MaxEvents)
+            {
+                var dumpFile = Path.GetFileName(_cachedProcDumpPath);
+                AllEvents.Add(new MonitorEvent(
+                    DateTime.Now, "ProcDump",
+                    $"Process dump created: {dumpFile}",
+                    "Warning",
+                    $"Dump saved to: {_cachedProcDumpPath}. "
+                    + "Open with WinDbg or Visual Studio for analysis. "
+                    + "For .NET processes: 'dotnet-dump analyze <path>'."));
+            }
+        }
+
+        // 10. Track history (capped, trimmed) and running stats for report
+        _history.Add(TrimForHistory(finalSample));
+        if (_history.Count > MaxHistory)
+            _history.RemoveAt(0);
         TrackSamplesForReport(finalSample);
 
         return finalSample;
@@ -203,35 +283,33 @@ public sealed class SystemHealthEngine
             EndTime: endTime,
             TotalSamples: sampleCount,
             Events: AllEvents.ToList(),
-            // Befintliga
-            AvgCpu: SafeAvg(_cpuSamples),
-            PeakCpu: SafeMax(_cpuSamples),
-            AvgMemory: SafeAvg(_memorySamples),
-            PeakMemory: SafeMax(_memorySamples),
-            AvgDiskQueue: SafeAvg(_diskQueueSamples),
-            PeakDiskQueue: SafeMax(_diskQueueSamples),
-            AvgNetworkMbps: SafeAvg(_networkSamples),
-            PeakNetworkMbps: SafeMax(_networkSamples),
-            PeakSystemHandles: _handleSamples.Count > 0 ? _handleSamples.Max() : 0,
-            PeakPageFaults: SafeMax(_pageFaultSamples),
-            PeakCommittedBytes: _committedBytesSamples.Count > 0 ? _committedBytesSamples.Max() : 0,
-            // Nya
-            PeakPagesInputPerSec: SafeMax(_pagesInputSamples),
-            PeakDpcTimePercent: SafeMax(_dpcTimeSamples),
-            PeakInterruptTimePercent: SafeMax(_interruptTimeSamples),
-            PeakContextSwitchesPerSec: SafeMax(_contextSwitchSamples),
-            PeakProcessorQueueLength: _procQueueSamples.Count > 0 ? _procQueueSamples.Max() : 0,
-            PeakAvgDiskSecRead: SafeMax(_diskSecReadSamples),
-            PeakAvgDiskSecWrite: SafeMax(_diskSecWriteSamples),
-            PeakPoolNonpagedBytes: _poolNonpagedSamples.Count > 0 ? _poolNonpagedSamples.Max() : 0,
-            PeakPoolPagedBytes: _poolPagedSamples.Count > 0 ? _poolPagedSamples.Max() : 0,
-            PeakGpuUtilizationPercent: SafeMax(_gpuUtilSamples),
-            PeakDnsLatencyMs: SafeMax(_dnsLatencySamples),
-            PeakStorageErrorsLast15Min: _storageErrorSamples.Count > 0 ? _storageErrorSamples.Max() : 0,
-            AvgMemoryPressureIndex: _memPressureSamples.Count > 0 ? (int)_memPressureSamples.Average() : 0,
-            PeakMemoryPressureIndex: _memPressureSamples.Count > 0 ? _memPressureSamples.Max() : 0,
-            AvgSystemLatencyScore: _latencyScoreSamples.Count > 0 ? (int)_latencyScoreSamples.Average() : 0,
-            PeakSystemLatencyScore: _latencyScoreSamples.Count > 0 ? _latencyScoreSamples.Max() : 0,
+            AvgCpu:                    _cpuStat.Avg,
+            PeakCpu:                   _cpuStat.Max,
+            AvgMemory:                 _memoryStat.Avg,
+            PeakMemory:                _memoryStat.Max,
+            AvgDiskQueue:              _diskQueueStat.Avg,
+            PeakDiskQueue:             _diskQueueStat.Max,
+            AvgNetworkMbps:            _networkStat.Avg,
+            PeakNetworkMbps:           _networkStat.Max,
+            PeakSystemHandles:         _handleStat.Max,
+            PeakPageFaults:            _pageFaultStat.Max,
+            PeakCommittedBytes:        _committedBytesStat.Max,
+            PeakPagesInputPerSec:      _pagesInputStat.Max,
+            PeakDpcTimePercent:        _dpcTimeStat.Max,
+            PeakInterruptTimePercent:  _interruptTimeStat.Max,
+            PeakContextSwitchesPerSec: _contextSwitchStat.Max,
+            PeakProcessorQueueLength:  _procQueueStat.Max,
+            PeakAvgDiskSecRead:        _diskSecReadStat.Max,
+            PeakAvgDiskSecWrite:       _diskSecWriteStat.Max,
+            PeakPoolNonpagedBytes:     _poolNonpagedStat.Max,
+            PeakPoolPagedBytes:        _poolPagedStat.Max,
+            PeakGpuUtilizationPercent: _gpuUtilStat.Max,
+            PeakDnsLatencyMs:          _dnsLatencyStat.Max,
+            PeakStorageErrorsLast15Min: _storageErrorStat.Max,
+            AvgMemoryPressureIndex:    _memPressureStat.Avg,
+            PeakMemoryPressureIndex:   _memPressureStat.Max,
+            AvgSystemLatencyScore:     _latencyScoreStat.Avg,
+            PeakSystemLatencyScore:    _latencyScoreStat.Max,
             FreezeCount: _freezeCount
         );
     }
@@ -240,9 +318,9 @@ public sealed class SystemHealthEngine
 
     /// <summary>
     /// Memory Pressure Index (0–100):
-    /// scoreA = CommittedBytes/CommitLimit × 100    [vikt 0.40]
-    /// scoreB = Clamp(PagesInputPerSec/50, 0, 100)  [vikt 0.35]
-    /// scoreC = 100 - (AvailableMBytes/TotalMB×100)  [vikt 0.25]
+    /// scoreA = CommittedBytes/CommitLimit × 100    [weight 0.40]
+    /// scoreB = Clamp(PagesInputPerSec/50, 0, 100)  [weight 0.35]
+    /// scoreC = 100 - (AvailableMBytes/TotalMB×100)  [weight 0.25]
     /// </summary>
     private static int ComputeMemoryPressureIndex(MonitorSample s)
     {
@@ -262,9 +340,9 @@ public sealed class SystemHealthEngine
 
     /// <summary>
     /// System Latency Score (0–100):
-    /// scoreA = Clamp((DPC%+IRQ%)/0.20×100, 0, 100)            [vikt 0.30]
-    /// scoreB = Clamp(MaxDiskLatencyMs/2, 0, 100)               [vikt 0.35]
-    /// scoreC = Clamp(ProcQueueLength/(2×cores)×100, 0, 100)    [vikt 0.35]
+    /// scoreA = Clamp((DPC%+IRQ%)/0.20×100, 0, 100)            [weight 0.30]
+    /// scoreB = Clamp(MaxDiskLatencyMs/2, 0, 100)               [weight 0.35]
+    /// scoreC = Clamp(ProcQueueLength/(2×cores)×100, 0, 100)    [weight 0.35]
     /// </summary>
     private static int ComputeSystemLatencyScore(MonitorSample s)
     {
@@ -343,15 +421,15 @@ public sealed class SystemHealthEngine
         if (sample.NetworkMbps > NetworkSpikeMbps)
         {
             _consecutiveHighNetwork++;
-            if (_consecutiveHighNetwork == NetworkSpikeConsecutive)
+            if (_consecutiveHighNetwork == NetworkSpikeConsecutive && AllEvents.Count < MaxEvents)
             {
                 AllEvents.Add(new MonitorEvent(
                     DateTime.Now, "NetworkSpike",
-                    $"Nätverksspik: {sample.NetworkMbps:F0} Mbps i {_consecutiveHighNetwork * 3} sekunder",
+                    $"Network spike: {sample.NetworkMbps:F0} Mbps for {_consecutiveHighNetwork * 3} seconds",
                     sample.NetworkMbps > 500 ? "Critical" : "Warning",
-                    "Kontrollera om något laddar ned/upp i bakgrunden (Windows Update, OneDrive, Steam, etc). "
-                    + "Öppna Aktivitetshanteraren → Nätverk-kolumnen. "
-                    + "Stäng av automatiska uppdateringar tillfälligt om det stör."));
+                    "Check if something is downloading/uploading in the background (Windows Update, OneDrive, Steam, etc). "
+                    + "Open Task Manager → Network column. "
+                    + "Temporarily disable automatic updates if it's interfering."));
             }
         }
         else
@@ -372,17 +450,30 @@ public sealed class SystemHealthEngine
                 var hangEvent = AllEvents.LastOrDefault(e =>
                     e.EventType == "Hang" &&
                     e.Description.Contains(hang.Name) &&
-                    !e.Description.Contains("svarade inte"));
+                    !e.Description.Contains("was not responding"));
 
                 if (hangEvent is not null)
                 {
                     int idx = AllEvents.LastIndexOf(hangEvent);
-                    string freezeHint = sample.FreezeInfo is not null && sample.FreezeInfo.ProcessName == hang.Name
-                        ? $" → Trolig orsak: {sample.FreezeInfo.LikelyCause}"
-                        : "";
+
+                    // Prefer the richer DeepFreezeReport root cause over the quick FreezeClassification
+                    string freezeHint = "";
+                    if (sample.DeepFreezeReport is not null
+                        && sample.DeepFreezeReport.ProcessName.Equals(hang.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        freezeHint = $" → {sample.DeepFreezeReport.LikelyRootCause}";
+                        if (sample.DeepFreezeReport.MiniDumpPath is not null)
+                            freezeHint += $" (dump: {Path.GetFileName(sample.DeepFreezeReport.MiniDumpPath)})";
+                    }
+                    else if (sample.FreezeInfo is not null
+                        && sample.FreezeInfo.ProcessName.Equals(hang.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        freezeHint = $" → Likely cause: {sample.FreezeInfo.LikelyCause}";
+                    }
+
                     AllEvents[idx] = hangEvent with
                     {
-                        Description = $"UI-hängning: {hang.Name} svarar inte ({hang.HangSeconds:F0} sek){freezeHint}"
+                        Description = $"UI hang: {hang.Name} not responding ({hang.HangSeconds:F0} sec){freezeHint}"
                     };
                 }
             }
@@ -395,7 +486,7 @@ public sealed class SystemHealthEngine
         for (int i = AllEvents.Count - 1; i >= 0; i--)
         {
             var ev = AllEvents[i];
-            if (ev.EventType == "Hang" && !ev.Description.Contains("svarade inte"))
+            if (ev.EventType == "Hang" && !ev.Description.Contains("was not responding"))
             {
                 // Check if this hang's process is resolved
                 foreach (var name in tracker.Keys.Where(k => !currentHangNames.Contains(k)))
@@ -405,7 +496,7 @@ public sealed class SystemHealthEngine
                         var hangDuration = (DateTime.Now - tracker[name]).TotalSeconds;
                         AllEvents[i] = ev with
                         {
-                            Description = $"UI-hängning: {name} svarade inte ({hangDuration:F0} sek, återhämtad)"
+                            Description = $"UI hang: {name} was not responding ({hangDuration:F0} sec, recovered)"
                         };
                     }
                 }
@@ -417,29 +508,108 @@ public sealed class SystemHealthEngine
 
     private void TrackSamplesForReport(MonitorSample s)
     {
-        _cpuSamples.Add(s.CpuPercent);
-        _memorySamples.Add(s.MemoryUsedPercent);
-        _diskQueueSamples.Add(s.DiskQueueLength);
-        _networkSamples.Add(s.NetworkMbps);
-        _handleSamples.Add(s.TotalSystemHandles);
-        _pageFaultSamples.Add(s.PageFaultsPerSec);
-        _committedBytesSamples.Add(s.CommittedBytes);
-        _pagesInputSamples.Add(s.PagesInputPerSec);
-        _dpcTimeSamples.Add(s.DpcTimePercent);
-        _interruptTimeSamples.Add(s.InterruptTimePercent);
-        _contextSwitchSamples.Add(s.ContextSwitchesPerSec);
-        _procQueueSamples.Add(s.ProcessorQueueLength);
-        _diskSecReadSamples.Add(s.AvgDiskSecRead);
-        _diskSecWriteSamples.Add(s.AvgDiskSecWrite);
-        _poolNonpagedSamples.Add(s.PoolNonpagedBytes);
-        _poolPagedSamples.Add(s.PoolPagedBytes);
-        _memPressureSamples.Add(s.MemoryPressureIndex);
-        _latencyScoreSamples.Add(s.SystemLatencyScore);
-        _gpuUtilSamples.Add(s.GpuUtilizationPercent);
-        _dnsLatencySamples.Add(s.DnsLatencyMs);
-        _storageErrorSamples.Add(s.StorageErrorsLast15Min);
+        _cpuStat.Add(s.CpuPercent);
+        _memoryStat.Add(s.MemoryUsedPercent);
+        _diskQueueStat.Add(s.DiskQueueLength);
+        _networkStat.Add(s.NetworkMbps);
+        _handleStat.Add(s.TotalSystemHandles);
+        _pageFaultStat.Add(s.PageFaultsPerSec);
+        _committedBytesStat.Add(s.CommittedBytes);
+        _pagesInputStat.Add(s.PagesInputPerSec);
+        _dpcTimeStat.Add(s.DpcTimePercent);
+        _interruptTimeStat.Add(s.InterruptTimePercent);
+        _contextSwitchStat.Add(s.ContextSwitchesPerSec);
+        _procQueueStat.Add(s.ProcessorQueueLength);
+        _diskSecReadStat.Add(s.AvgDiskSecRead);
+        _diskSecWriteStat.Add(s.AvgDiskSecWrite);
+        _poolNonpagedStat.Add(s.PoolNonpagedBytes);
+        _poolPagedStat.Add(s.PoolPagedBytes);
+        _memPressureStat.Add(s.MemoryPressureIndex);
+        _latencyScoreStat.Add(s.SystemLatencyScore);
+        _gpuUtilStat.Add(s.GpuUtilizationPercent);
+        _dnsLatencyStat.Add(s.DnsLatencyMs);
+        _storageErrorStat.Add(s.StorageErrorsLast15Min);
     }
 
-    private static double SafeAvg(List<double> list) => list.Count > 0 ? list.Average() : 0;
-    private static double SafeMax(List<double> list) => list.Count > 0 ? list.Max() : 0;
+    /// <summary>
+    /// Returns a lightweight copy of the sample for history storage.
+    /// Strips process lists and Sysinternals blobs — sub-analyzers only read
+    /// scalar fields from historical samples (e.g. MemoryAvailableBytes for
+    /// trend detection). Reduces per-sample memory by ~80%.
+    /// </summary>
+    private static MonitorSample TrimForHistory(MonitorSample s) => s with
+    {
+        TopCpuProcesses          = [],
+        TopMemoryProcesses       = [],
+        TopGdiProcesses          = [],
+        TopIoProcesses           = [],
+        TopFaultProcesses        = [],
+        StorageErrorDetails      = null,
+        SysinternalsHandleData   = null,
+        SysinternalsPoolData     = null,
+        DiskSpaces               = null,
+        FreezeInfo               = null,
+        DeepFreezeReport         = null,
+        SysinternalsDiskExtOutput    = null,
+        SysinternalsProcDumpPath     = null,
+        SysinternalsProcDumpAnalysis = null,
+    };
+
+    /// <summary>
+    /// Strips any trailing "(ongoing Xs)" or "(resolved after Xs)" suffix added by deduplication.
+    /// </summary>
+    private static string StripStatusSuffix(string desc)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(
+            desc, @" \((ongoing|resolved after) \d+s\)$");
+        return m.Success ? desc[..m.Index] : desc;
+    }
+
+    // ── Value-type running statistics — zero heap allocation per sample ──
+
+    /// <summary>Tracks count, running sum, and running max for double values.</summary>
+    private struct RunningStat
+    {
+        private int    _count;
+        private double _sum;
+        private double _max;
+
+        public void Add(double value)
+        {
+            _count++;
+            _sum += value;
+            if (value > _max) _max = value;
+        }
+
+        public readonly double Avg => _count > 0 ? _sum / _count : 0;
+        public readonly double Max => _max;
+    }
+
+    /// <summary>Tracks running max for long values (no avg needed).</summary>
+    private struct RunningStatLong
+    {
+        private long _max;
+
+        public void Add(long value) { if (value > _max) _max = value; }
+
+        public readonly long Max => _max;
+    }
+
+    /// <summary>Tracks count, running sum, and running max for int values.</summary>
+    private struct RunningStatInt
+    {
+        private int  _count;
+        private long _sum;
+        private int  _max;
+
+        public void Add(int value)
+        {
+            _count++;
+            _sum += value;
+            if (value > _max) _max = value;
+        }
+
+        public readonly int Avg => _count > 0 ? (int)(_sum / _count) : 0;
+        public readonly int Max => _max;
+    }
 }

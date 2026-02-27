@@ -64,14 +64,14 @@ public sealed class GpuHealthAnalyzer : IHealthSubAnalyzer
                 events.Add(new MonitorEvent(
                     DateTime.Now,
                     "GpuSaturation",
-                    $"GPU-mättnad: {current.GpuUtilizationPercent:F0}%",
+                    $"GPU saturation: {current.GpuUtilizationPercent:F0}%",
                     "Warning",
-                    "GPU är hårt belastad vilket kan ge renderingsfördröjningar och UI-stutter. " +
-                    "ÅTGÄRDER: " +
-                    "1) Sänk grafikinställningar i spel/program: Minska upplösning, inaktivera ray-tracing, sänk skuggkvalitet. " +
-                    "2) Stäng GPU-tunga applikationer i bakgrunden (t.ex. videoencoding, 3D-rendering). " +
-                    "3) Uppdatera GPU-drivrutinen: NVIDIA (GeForce Experience), AMD (Radeon Software), Intel (Intel Driver & Support Assistant). " +
-                    "4) Kontrollera GPU-temperatur med t.ex. GPU-Z — överhettning kan throttla prestanda."));
+                    "GPU is under heavy load which can cause rendering delays and UI stutter. " +
+                    "ACTIONS: " +
+                    "1) Lower graphics settings in games/apps: Reduce resolution, disable ray-tracing, lower shadow quality. " +
+                    "2) Close GPU-heavy applications in the background (e.g., video encoding, 3D rendering). " +
+                    "3) Update GPU driver: NVIDIA (GeForce Experience), AMD (Radeon Software), Intel (Intel Driver & Support Assistant). " +
+                    "4) Check GPU temperature with e.g. GPU-Z — overheating can throttle performance."));
             }
         }
         else
@@ -91,14 +91,14 @@ public sealed class GpuHealthAnalyzer : IHealthSubAnalyzer
                     events.Add(new MonitorEvent(
                         DateTime.Now,
                         "GpuVramPressure",
-                        $"VRAM-tryck: {vramRatio * 100:F0}%",
+                        $"VRAM pressure: {vramRatio * 100:F0}%",
                         vramRatio > 0.98 ? "Critical" : "Warning",
-                        "VRAM (videominne) är nästan fullt vilket kan ge hitching, frysningar och stuttering. " +
-                        "ÅTGÄRDER: " +
-                        "1) Minska texturkvalitet och upplösning i spel/program. " +
-                        "2) Stäng andra GPU-intensiva program. " +
-                        "3) Om möjligt, uppgradera till grafikkort med mer VRAM. " +
-                        "4) I vissa spel: Aktivera 'Texture Streaming' för att minska VRAM-användning."));
+                        "VRAM (video memory) is nearly full which can cause hitching, freezes, and stuttering. " +
+                        "ACTIONS: " +
+                        "1) Reduce texture quality and resolution in games/apps. " +
+                        "2) Close other GPU-intensive programs. " +
+                        "3) If possible, upgrade to a graphics card with more VRAM. " +
+                        "4) In some games: Enable 'Texture Streaming' to reduce VRAM usage."));
                 }
             }
             else
@@ -113,21 +113,21 @@ public sealed class GpuHealthAnalyzer : IHealthSubAnalyzer
             events.Add(new MonitorEvent(
                 DateTime.Now,
                 "GpuTdr",
-                $"GPU TDR/återställningar: {current.TdrEventsLast15Min} senaste 15 min",
+                $"GPU TDR/resets: {current.TdrEventsLast15Min} in last 15 min",
                 current.TdrEventsLast15Min > 3 ? "Critical" : "Warning",
-                "Display-drivrutinen kraschar och återställs (TDR - Timeout Detection and Recovery, Event ID 4101). Detta orsakar skärmflimmer och kan frysa program. " +
-                "ÅTGÄRDER: " +
-                "1) Uppdatera GPU-drivrutinen: För NVIDIA gå till geforce.com/drivers, för AMD till amd.com/support, för Intel till intel.com/content/www/us/en/support/detect.html. " +
-                "2) Använd DDU (Display Driver Uninstaller) för att göra en ren drivrutinsinstallation: Boota i felsäkert läge → Kör DDU → Avinstallera drivrutin → Starta om → Installera ny drivrutin. " +
-                "3) Om nyligen uppdaterad: Rulla tillbaka till tidigare fungerande drivrutin via Enhetshanteraren. " +
-                "4) Kontrollera GPU-temperatur — överhettning kan orsaka TDR. " +
-                "5) Om GPU är överklockat: Återställ till fabriksinställningar. " +
-                "6) Testa GPU-stabilitet med verktyg som FurMark eller 3DMark."));
+                "Display driver is crashing and recovering (TDR - Timeout Detection and Recovery, Event ID 4101). This causes screen flickering and can freeze programs. " +
+                "ACTIONS: " +
+                "1) Update GPU driver: For NVIDIA go to geforce.com/drivers, for AMD to amd.com/support, for Intel to intel.com/content/www/us/en/support/detect.html. " +
+                "2) Use DDU (Display Driver Uninstaller) for a clean driver install: Boot in safe mode → Run DDU → Uninstall driver → Restart → Install new driver. " +
+                "3) If recently updated: Roll back to previously working driver via Device Manager. " +
+                "4) Check GPU temperature — overheating can cause TDR. " +
+                "5) If GPU is overclocked: Reset to factory settings. " +
+                "6) Test GPU stability with tools like FurMark or 3DMark."));
         }
 
         healthScore = Math.Clamp(healthScore, 0, 100);
         double confidence = history.Count >= 3 ? 1.0 : history.Count / 3.0;
-        string? hint = current.TdrEventsLast15Min > 0 ? "GPU-drivrutin instabil (TDR-events)" : null;
+        string? hint = current.TdrEventsLast15Min > 0 ? "GPU driver unstable (TDR events)" : null;
 
         return new HealthAssessment(new HealthScore(Domain, healthScore, confidence, hint), events);
     }

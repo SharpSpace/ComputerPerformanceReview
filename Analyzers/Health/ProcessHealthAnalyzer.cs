@@ -243,11 +243,11 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
                 
                 events.Add(new MonitorEvent(
                     DateTime.Now, "Hang",
-                    $"UI-hängning: {proc} svarar inte",
+                    $"UI hang: {proc} not responding",
                     "Critical",
-                    $"Prova vänta 30 sek. Om {proc} inte återhämtar sig → Aktivitetshanteraren → Avsluta aktivitet. "
-                    + "Kontrollera även att drivrutiner (särskilt GPU) är uppdaterade. "
-                    + "Om det upprepas: kör 'sfc /scannow' i admin-CMD."));
+                    $"Try waiting 30 sec. If {proc} doesn't recover → Task Manager → End task. "
+                    + "Also check that drivers (especially GPU) are up to date. "
+                    + "If it repeats: run 'sfc /scannow' in admin CMD."));
             }
         }
 
@@ -272,7 +272,7 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
         double confidence = _hasPrevCpuTimes ? 1.0 : 0.3;
 
         string? hint = hangingNames.Count > 0
-            ? $"Process-hängning: {string.Join(", ", hangingNames)} svarar inte"
+            ? $"Process hang: {string.Join(", ", hangingNames)} not responding"
             : null;
 
         return new HealthAssessment(
@@ -280,7 +280,7 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
             events);
     }
 
-    /// <summary>Ger tillgång till hangingTracker för FreezeDetector</summary>
+    /// <summary>Provides access to hangingTracker for FreezeDetector</summary>
     public IReadOnlyDictionary<string, DateTime> HangingTracker => _hangingTracker;
 
     private void DetectHandleLeaks(MonitorSample sample, List<MonitorEvent> events, ref int healthScore)
@@ -310,16 +310,16 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
                                 .Take(3)
                                 .Select(kvp => $"{kvp.Key}: {kvp.Value}")
                                 .ToList();
-                            handleDetails = $" Topp-typer: {string.Join(", ", topTypes)}.";
+                            handleDetails = $" Top types: {string.Join(", ", topTypes)}.";
                         }
                         
                         events.Add(new MonitorEvent(
                             DateTime.Now, "HandleLeak",
-                            $"Handle-läcka: {current.Name} +{growth} handles (nu: {current.HandleCount}){handleDetails}",
+                            $"Handle leak: {current.Name} +{growth} handles (now: {current.HandleCount}){handleDetails}",
                             growth > 5000 ? "Critical" : "Warning",
-                            $"Programmet {current.Name} läcker resurser (handles). "
-                            + "Prova starta om programmet. Om det upprepas: uppdatera till senaste versionen. "
-                            + "Kör 'Handle.exe' från Sysinternals för djupare analys."));
+                            $"Program {current.Name} is leaking resources (handles). "
+                            + "Try restarting the program. If it repeats: update to the latest version. "
+                            + "Run 'Handle.exe' from Sysinternals for deeper analysis."));
                     }
                 }
             }
@@ -339,22 +339,22 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
                 healthScore -= 25;
                 events.Add(new MonitorEvent(
                     DateTime.Now, "GdiLeak",
-                    $"GDI-kritiskt: {proc.Name} har {proc.GdiObjects} GDI-objekt (kraschar vid 10000!)",
+                    $"GDI critical: {proc.Name} has {proc.GdiObjects} GDI objects (crashes at 10000!)",
                     "Critical",
-                    $"AKUT: {proc.Name} närmar sig GDI-gränsen (10000)! "
-                    + "Spara ditt arbete och starta om programmet OMEDELBART. "
-                    + "Detta är en bugg i programmet — rapportera till utvecklaren."));
+                    $"URGENT: {proc.Name} approaching GDI limit (10000)! "
+                    + "Save your work and restart the program IMMEDIATELY. "
+                    + "This is a bug in the program — report to the developer."));
             }
             else if (proc.GdiObjects > GdiWarningThreshold)
             {
                 healthScore -= 10;
                 events.Add(new MonitorEvent(
                     DateTime.Now, "GdiLeak",
-                    $"GDI-varning: {proc.Name} har {proc.GdiObjects} GDI-objekt",
+                    $"GDI warning: {proc.Name} has {proc.GdiObjects} GDI objects",
                     "Warning",
-                    $"{proc.Name} använder ovanligt många GDI-objekt. "
-                    + "Om det stiger mot 10000 kraschar Windows-gränssnittet. "
-                    + "Prova starta om programmet."));
+                    $"{proc.Name} is using an unusually high number of GDI objects. "
+                    + "If it rises toward 10000 the Windows UI will crash. "
+                    + "Try restarting the program."));
             }
         }
     }
@@ -378,12 +378,12 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
                         healthScore -= isCritical ? 20 : 10;
                         events.Add(new MonitorEvent(
                             DateTime.Now, "ThreadExplosion",
-                            $"Tråd-explosion: {current.Name} +{growth} trådar (nu: {current.ThreadCount})",
+                            $"Thread explosion: {current.Name} +{growth} threads (now: {current.ThreadCount})",
                             isCritical ? "Critical" : "Warning",
-                            $"{current.Name} skapar trådar okontrollerat (+{growth} på 3 sek). "
-                            + "Detta kan orsaka thread pool starvation och systemfrysning. "
-                            + "Starta om programmet och rapportera buggen till utvecklaren. "
-                            + "Om det är en .NET-app: kontrollera Task.Run-anrop och async-patterns."));
+                            $"{current.Name} is creating threads uncontrollably (+{growth} in 3 sec). "
+                            + "This can cause thread pool starvation and system freeze. "
+                            + "Restart the program and report the bug to the developer. "
+                            + "If it's a .NET app: check Task.Run calls and async patterns."));
                     }
                 }
             }

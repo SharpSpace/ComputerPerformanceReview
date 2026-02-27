@@ -44,8 +44,8 @@ public static class ConsoleHelper
         var (label, color) = result.Severity switch
         {
             Severity.Ok => ("[OK]      ", ConsoleColor.Green),
-            Severity.Warning => ("[VARNING] ", ConsoleColor.Yellow),
-            Severity.Critical => ("[KRITISKT]", ConsoleColor.Red),
+            Severity.Warning => ("[WARNING] ", ConsoleColor.Yellow),
+            Severity.Critical => ("[CRITICAL]", ConsoleColor.Red),
             _ => ("[?]       ", ConsoleColor.Gray)
         };
 
@@ -67,7 +67,7 @@ public static class ConsoleHelper
         if (result.ActionSteps is { Count: > 0 })
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine($"             ÅTGÄRDER:");
+            Console.WriteLine($"             ACTIONS:");
             Console.ResetColor();
             
             for (int i = 0; i < result.ActionSteps.Count; i++)
@@ -89,7 +89,7 @@ public static class ConsoleHelper
                 if (!string.IsNullOrEmpty(step.CommandHint))
                 {
                     Console.ForegroundColor = ConsoleColor.DarkCyan;
-                    Console.WriteLine($"                  Kommando: {step.CommandHint}");
+                    Console.WriteLine($"                  Command: {step.CommandHint}");
                 }
                 
                 Console.ResetColor();
@@ -127,7 +127,7 @@ public static class ConsoleHelper
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.White;
         Console.WriteLine("╔" + new string('═', BoxWidth) + "╗");
-        var title = "SAMMANFATTNING";
+        var title = "SUMMARY";
         var titlePadded = title.PadLeft((BoxWidth + title.Length) / 2).PadRight(BoxWidth);
         Console.WriteLine("║" + titlePadded + "║");
         Console.WriteLine("╠" + new string('═', BoxWidth) + "╣");
@@ -140,7 +140,7 @@ public static class ConsoleHelper
         string barFilled = new('█', filledBars);
         string barEmpty = new('░', emptyBars);
 
-        Console.Write("║  Systemhälsa: ");
+        Console.Write("║  System health: ");
         Console.ForegroundColor = scoreColor;
         Console.Write($"{score}/100");
         Console.ResetColor();
@@ -150,7 +150,7 @@ public static class ConsoleHelper
         Console.ResetColor();
         Console.Write(barEmpty);
         Console.Write("]");
-        var barLine = $"  Systemhälsa: {score}/100  [{barFilled}{barEmpty}]";
+        var barLine = $"  System health: {score}/100  [{barFilled}{barEmpty}]";
         var barPadding = BoxWidth - barLine.Length;
         if (barPadding > 0) Console.Write(new string(' ', barPadding));
         Console.WriteLine("║");
@@ -161,7 +161,7 @@ public static class ConsoleHelper
         if (criticalCount > 0)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            WriteBoxLine($"  Kritiska problem ({criticalCount}):");
+            WriteBoxLine($"  Critical issues ({criticalCount}):");
             Console.ResetColor();
             int idx = 1;
             foreach (var r in allResults.Where(r => r.Severity == Severity.Critical))
@@ -181,7 +181,7 @@ public static class ConsoleHelper
         if (warningCount > 0)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            WriteBoxLine($"  Varningar ({warningCount}):");
+            WriteBoxLine($"  Warnings ({warningCount}):");
             Console.ResetColor();
             int idx = 1;
             foreach (var r in allResults.Where(r => r.Severity == Severity.Warning))
@@ -198,7 +198,7 @@ public static class ConsoleHelper
         if (criticalCount == 0 && warningCount == 0)
         {
             Console.ForegroundColor = ConsoleColor.Green;
-            WriteBoxLine("  Inga problem hittades! Ditt system ser bra ut.");
+            WriteBoxLine("  No issues found! Your system looks good.");
             Console.ResetColor();
             WriteBoxLine("");
         }
@@ -220,7 +220,7 @@ public static class ConsoleHelper
         {
             Console.WriteLine();
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("  REKOMMENDATIONER:");
+            Console.WriteLine("  RECOMMENDATIONS:");
             Console.ResetColor();
             for (int i = 0; i < recommendations.Count; i++)
             {
@@ -292,12 +292,12 @@ public static class ConsoleHelper
     {
         if (history.Count == 0) return;
 
-        WriteSectionHeader("HISTORISK JÄMFÖRELSE");
+        WriteSectionHeader("HISTORICAL COMPARISON");
 
         // Table header
         Console.ForegroundColor = ConsoleColor.White;
         Console.WriteLine("  {0,-20} {1,-10} {2,-10} {3,-10} {4}",
-            "Körning", "Hälsa", "Kritiska", "Varningar", "Trend");
+            "Run", "Health", "Critical", "Warnings", "Trend");
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine("  " + new string('─', 65));
         Console.ResetColor();
@@ -401,7 +401,7 @@ public static class ConsoleHelper
         {
             Console.ForegroundColor = ConsoleColor.Gray;
             Console.WriteLine();
-            Console.WriteLine("  Inga förändringar sedan förra körningen.");
+            Console.WriteLine("  No changes since last run.");
             Console.ResetColor();
             return;
         }
@@ -411,11 +411,11 @@ public static class ConsoleHelper
         if (newIssues.Count > 0)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("  Nya problem sedan förra körningen:");
+            Console.WriteLine("  New issues since last run:");
             Console.ResetColor();
             foreach (var issue in newIssues)
             {
-                var label = issue.r.Severity == "Critical" ? "KRITISKT" : "VARNING";
+                var label = issue.r.Severity == "Critical" ? "CRITICAL" : "WARNING";
                 Console.ForegroundColor = issue.r.Severity == "Critical" ? ConsoleColor.Red : ConsoleColor.Yellow;
                 Console.Write($"    + [{label}] ");
                 Console.ResetColor();
@@ -427,11 +427,11 @@ public static class ConsoleHelper
         if (resolvedIssues.Count > 0)
         {
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("  Lösta problem sedan förra körningen:");
+            Console.WriteLine("  Resolved issues since last run:");
             Console.ResetColor();
             foreach (var issue in resolvedIssues)
             {
-                var label = issue.r.Severity == "Critical" ? "KRITISKT" : "VARNING";
+                var label = issue.r.Severity == "Critical" ? "CRITICAL" : "WARNING";
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write($"    - [{label}] ");
                 Console.ResetColor();

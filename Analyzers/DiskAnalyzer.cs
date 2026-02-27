@@ -5,7 +5,7 @@ public sealed class DiskAnalyzer : IAnalyzer
     private const int SnapshotScanTimeoutMs = 500;
     private const int SnapshotScanMaxDepth = 2;
 
-    public string Name => "Diskanalys";
+    public string Name => "Disk Analysis";
 
     public Task<AnalysisReport> AnalyzeAsync()
     {
@@ -22,7 +22,7 @@ public sealed class DiskAnalyzer : IAnalyzer
         AnalyzeSmartStatus(results);
         DetectDiskType(results);
 
-        return Task.FromResult(new AnalysisReport("DISKANALYS", results));
+        return Task.FromResult(new AnalysisReport("DISK ANALYSIS", results));
     }
 
     private static void AnalyzeDriveSpace(List<AnalysisResult> results, bool hasHdd)
@@ -47,19 +47,37 @@ public sealed class DiskAnalyzer : IAnalyzer
                     severity = Severity.Warning;
 
                 string? recommendation = severity != Severity.Ok
-                    ? $"Frigör utrymme på {drive.Name.TrimEnd('\\')}"
+                    ? $"Free up space on {drive.Name.TrimEnd('\\')}"
                     : null;
 
                 if (hasHdd && usedPercent > 85)
                 {
-                    recommendation = "HDD med hög fyllnadsgrad kan ge fragmentering och mikro-frysningar. Frigör utrymme eller flytta data.";
+                    recommendation = "HDD with high fill rate can cause fragmentation and micro-freezes. Free up space or move data.";
                 }
 
-                results.Add(new AnalysisResult("Disk", $"Enhet {drive.Name}",
-                    $"{drive.Name.TrimEnd('\\')} {ConsoleHelper.FormatBytes(drive.AvailableFreeSpace)} ledigt " +
-                    $"av {ConsoleHelper.FormatBytes(drive.TotalSize)} ({usedPercent:F1}% använt)",
+                List<ActionStep>? actionSteps = null;
+                if (severity != Severity.Ok)
+                {
+                    char driveLetter = drive.Name[0];
+                    actionSteps =
+                    [
+                        new ActionStep(
+                            $"Open Disk Cleanup for drive {driveLetter}:",
+                            $"cleanmgr.exe /d {driveLetter}",
+                            "Easy"),
+                        new ActionStep(
+                            "Open Storage settings (manage large apps/files)",
+                            "start ms-settings:storagesense",
+                            "Easy"),
+                    ];
+                }
+
+                results.Add(new AnalysisResult("Disk", $"Drive {drive.Name}",
+                    $"{drive.Name.TrimEnd('\\')} {ConsoleHelper.FormatBytes(drive.AvailableFreeSpace)} free " +
+                    $"of {ConsoleHelper.FormatBytes(drive.TotalSize)} ({usedPercent:F1}% used)",
                     severity,
-                    recommendation));
+                    recommendation,
+                    actionSteps));
             }
             catch { }
         }
@@ -86,10 +104,23 @@ public sealed class DiskAnalyzer : IAnalyzer
                 _ => Severity.Ok
             };
 
-            results.Add(new AnalysisResult("Disk", "Temporära filer",
-                $"Temporära filer: {ConsoleHelper.FormatBytes(totalSize)} ({fileCount} filer) i {tempPath}",
+            results.Add(new AnalysisResult("Disk", "Temporary files",
+                $"Temporary files: {ConsoleHelper.FormatBytes(totalSize)} ({fileCount} files) in {tempPath}",
                 severity,
-                severity != Severity.Ok ? "Rensa temporära filer via Diskrensning eller radera %TEMP%" : null));
+                severity != Severity.Ok ? "Clean temporary files via Disk Cleanup or delete %TEMP%" : null,
+                severity != Severity.Ok
+                    ?
+                    [
+                        new ActionStep(
+                            "Open Disk Cleanup (includes temp files)",
+                            "cleanmgr.exe",
+                            "Easy"),
+                        new ActionStep(
+                            "Open the Temp folder to delete manually",
+                            @"explorer.exe %TEMP%",
+                            "Easy"),
+                    ]
+                    : null));
         }
         catch { }
     }
@@ -101,7 +132,7 @@ public sealed class DiskAnalyzer : IAnalyzer
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (!Directory.Exists(localAppData)) return;
 
-            ConsoleHelper.WriteProgress("Skannar AppData\\Local...");
+            ConsoleHelper.WriteProgress("Scanning AppData\\Local...");
 
             // Measure top-level folders
             var folderSizes = new List<(string Name, string Path, long Size)>();
@@ -131,9 +162,9 @@ public sealed class DiskAnalyzer : IAnalyzer
             };
 
             results.Add(new AnalysisResult("Disk", "AppData\\Local total",
-                $"AppData\\Local: {ConsoleHelper.FormatBytes(totalSize)} i mappar > 100 MB",
+                $"AppData\\Local: {ConsoleHelper.FormatBytes(totalSize)} in folders > 100 MB",
                 totalSeverity,
-                totalSeverity != Severity.Ok ? "Rensa stora mappar i AppData\\Local (se nedan)" : null));
+                totalSeverity != Severity.Ok ? "Clean large folders in AppData\\Local (see below)" : null));
 
             // Sort biggest first, show top entries
             var topFolders = folderSizes
@@ -144,135 +175,151 @@ public sealed class DiskAnalyzer : IAnalyzer
             var cleanupHints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 // === Temp & crash ===
-                ["Temp"] = "Kan rensas: radera innehållet i mappen",
-                ["CrashDumps"] = "Kan rensas: gamla kraschdumpar behövs sällan",
-                ["CrashReportClient"] = "Kan rensas: gamla kraschrapporter",
-                ["CrashPad"] = "Kan rensas: kraschdata från Chromium-baserade appar",
-                ["Diagnostics"] = "Kan rensas: diagnostikloggar från Windows",
-                ["ElevatedDiagnostics"] = "Kan rensas: diagnostikdata som samlats med admin-rättigheter",
-                ["debuggee.mdmp"] = "Kan rensas: debugger memory dump-fil",
+                ["Temp"] = "Can be cleaned: delete the folder contents",
+                ["CrashDumps"] = "Can be cleaned: old crash dumps are rarely needed",
+                ["CrashReportClient"] = "Can be cleaned: old crash reports",
+                ["CrashPad"] = "Can be cleaned: crash data from Chromium-based apps",
+                ["Diagnostics"] = "Can be cleaned: diagnostic logs from Windows",
+                ["ElevatedDiagnostics"] = "Can be cleaned: diagnostic data collected with admin rights",
+                ["debuggee.mdmp"] = "Can be cleaned: debugger memory dump file",
 
-                // === GPU & grafik-cache ===
-                ["D3DSCache"] = "Kan rensas: DirectX shader-cache återskapas automatiskt",
-                ["NVIDIA"] = "Kan rensas: NVIDIA shader-cache (DXCache), återskapas automatiskt",
-                ["NVIDIA Corporation"] = "Kan delvis rensas: DXCache-mappen inuti kan tas bort",
-                ["IconCache.db"] = "Kan rensas: ikoncache återskapas automatiskt",
+                // === GPU & graphics cache ===
+                ["D3DSCache"] = "Can be cleaned: DirectX shader cache is recreated automatically",
+                ["NVIDIA"] = "Can be cleaned: NVIDIA shader cache (DXCache), recreated automatically",
+                ["NVIDIA Corporation"] = "Can partially clean: the DXCache folder inside can be removed",
+                ["IconCache.db"] = "Can be cleaned: icon cache is recreated automatically",
 
-                // === Pakethanterare & dev-verktyg ===
-                ["pip"] = "Kan rensas: Python pip-cache, kör 'pip cache purge'",
-                ["npm-cache"] = "Kan rensas: npm-cache, kör 'npm cache clean --force'",
-                ["yarn"] = "Kan rensas: Yarn-cache, kör 'yarn cache clean'",
-                ["NuGet"] = "Kan delvis rensas: NuGet-cache, kör 'dotnet nuget locals all --clear'",
-                ["conda"] = "Kan rensas: Conda-cache, kör 'conda clean --all'",
-                ["Docker"] = "Kan rensas: Docker-data, kör 'docker system prune'",
-                ["Docker Desktop Installer"] = "Kan rensas: gammal Docker-installer",
-                ["Package Cache"] = "Installers-cache (VS etc) - rensa försiktigt, kan behövas vid reparation",
-                ["assembly"] = ".NET GAC-assembly - rör ej utan vidare",
-                ["CMakeTools"] = "Kan rensas: CMake-cache, återskapas vid build",
-                ["ServiceHub"] = "VS ServiceHub-cache, kan rensas om VS inte körs",
-                ["Symbols"] = "Debug-symboler cache - kan rensas, laddas ner igen vid behov",
-                ["SymbolSourceSymbols"] = "Kan rensas: debug-symbolcache, laddas ned igen",
-                ["RefSrcSymbols"] = "Kan rensas: referenskälla-symboler, laddas ned igen",
-                ["SourceServer"] = "Kan rensas: källkods-symbolcache",
-                ["flutter_webview_windows"] = "Kan rensas: Flutter webview-cache",
-                ["Arduino15"] = "Arduino-data: ta bort oanvända boardpaket via Arduino IDE",
-                ["arduino-ide-updater"] = "Kan rensas: uppdateringscache för Arduino IDE",
-                ["azure-functions-core-tools"] = "Kan rensas: Azure Functions-verktyg cache",
-                ["AzureFunctionsTools"] = "Kan rensas: Azure Functions-verktyg cache",
-                ["AzureStorageEmulator"] = "Kan rensas om du inte använder Azure Storage Emulator",
-                ["ms-playwright"] = "Kan rensas: Playwright browsers, kör 'npx playwright install' igen vid behov",
-                ["XamarinBuildDownloadCache"] = "Kan rensas: Xamarin build-cache, laddas ned igen",
-                ["Xamarin"] = "Kan rensas: Xamarin-cache, laddas ned igen vid build",
+                // === Package managers & dev tools ===
+                ["pip"] = "Can be cleaned: Python pip cache, run 'pip cache purge'",
+                ["npm-cache"] = "Can be cleaned: npm cache, run 'npm cache clean --force'",
+                ["yarn"] = "Can be cleaned: Yarn cache, run 'yarn cache clean'",
+                ["NuGet"] = "Can partially clean: NuGet cache, run 'dotnet nuget locals all --clear'",
+                ["conda"] = "Can be cleaned: Conda cache, run 'conda clean --all'",
+                ["Docker"] = "Can be cleaned: Docker data, run 'docker system prune'",
+                ["Docker Desktop Installer"] = "Can be cleaned: old Docker installer",
+                ["Package Cache"] = "Installer cache (VS etc) - clean carefully, may be needed for repair",
+                ["assembly"] = ".NET GAC assembly - do not remove without reason",
+                ["CMakeTools"] = "Can be cleaned: CMake cache, recreated at build",
+                ["ServiceHub"] = "VS ServiceHub cache, can be cleaned if VS is not running",
+                ["Symbols"] = "Debug symbols cache - can be cleaned, re-downloaded as needed",
+                ["SymbolSourceSymbols"] = "Can be cleaned: debug symbol cache, re-downloaded",
+                ["RefSrcSymbols"] = "Can be cleaned: reference source symbols, re-downloaded",
+                ["SourceServer"] = "Can be cleaned: source code symbol cache",
+                ["flutter_webview_windows"] = "Can be cleaned: Flutter webview cache",
+                ["Arduino15"] = "Arduino data: remove unused board packages via Arduino IDE",
+                ["arduino-ide-updater"] = "Can be cleaned: update cache for Arduino IDE",
+                ["azure-functions-core-tools"] = "Can be cleaned: Azure Functions tools cache",
+                ["AzureFunctionsTools"] = "Can be cleaned: Azure Functions tools cache",
+                ["AzureStorageEmulator"] = "Can be cleaned if you don't use Azure Storage Emulator",
+                ["ms-playwright"] = "Can be cleaned: Playwright browsers, run 'npx playwright install' again if needed",
+                ["XamarinBuildDownloadCache"] = "Can be cleaned: Xamarin build cache, re-downloaded",
+                ["Xamarin"] = "Can be cleaned: Xamarin cache, re-downloaded at build",
 
                 // === IDE & editors ===
-                ["JetBrains"] = "JetBrains IDE-cache: rensa via IDE Settings → Invalidate Caches",
-                ["CodeMaid"] = "Kan rensas: CodeMaid-cache",
-                ["LINQPad"] = "LINQPad-data: snippets/cache, rensa snippets-cache om stor",
-                ["GitHub"] = "GitHub Desktop-data: cache kan rensas",
-                ["GitHubVisualStudio"] = "Kan rensas: VS GitHub-tilläggscache",
-                ["GitKrakenCLI"] = "Kan rensas: GitKraken CLI-cache",
-                ["github-copilot"] = "Kan rensas: GitHub Copilot-cache",
+                ["JetBrains"] = "JetBrains IDE cache: clean via IDE Settings → Invalidate Caches",
+                ["CodeMaid"] = "Can be cleaned: CodeMaid cache",
+                ["LINQPad"] = "LINQPad data: snippets/cache, clean snippets cache if large",
+                ["GitHub"] = "GitHub Desktop data: cache can be cleaned",
+                ["GitHubVisualStudio"] = "Can be cleaned: VS GitHub extension cache",
+                ["GitKrakenCLI"] = "Can be cleaned: GitKraken CLI cache",
+                ["github-copilot"] = "Can be cleaned: GitHub Copilot cache",
 
-                // === Webbläsare ===
-                ["Google"] = "Chrome-data: rensa cache via Chrome → Inställningar → Rensa webbdata",
-                ["BraveSoftware"] = "Brave-cache: rensa via Inställningar → Rensa webbdata",
-                ["Mozilla"] = "Firefox-cache: rensa via Inställningar → Integritet → Rensa data",
-                ["Opera Software"] = "Opera-cache: rensa via webbläsarinställningar",
-                ["MicrosoftEdge"] = "Edge-cache: rensa via Edge → Inställningar → Rensa webbdata",
-                ["CEF"] = "Chromium Embedded Framework-cache, rensas av appen som använder den",
+                // === Browsers ===
+                ["Google"] = "Chrome data: clear cache via Chrome → Settings → Clear browsing data",
+                ["BraveSoftware"] = "Brave cache: clear via Settings → Clear browsing data",
+                ["Mozilla"] = "Firefox cache: clear via Settings → Privacy → Clear data",
+                ["Opera Software"] = "Opera cache: clear via browser settings",
+                ["MicrosoftEdge"] = "Edge cache: clear via Edge → Settings → Clear browsing data",
+                ["CEF"] = "Chromium Embedded Framework cache, cleared by the app that uses it",
 
-                // === Kommunikation ===
-                ["Discord"] = "Discord-cache: Cache/Code Cache-mapparna inuti kan rensas",
-                ["Slack"] = "Slack-cache: Cache-mapparna inuti kan rensas",
-                ["Teams"] = "Teams-cache: kan rensas via Teams-inställningar",
-                ["Comms"] = "Kan rensas: Microsoft Teams/kommunikations-cache",
+                // === Communication ===
+                ["Discord"] = "Discord cache: the Cache/Code Cache folders inside can be cleaned",
+                ["Slack"] = "Slack cache: the Cache folders inside can be cleaned",
+                ["Teams"] = "Teams cache: can be cleaned via Teams settings",
+                ["Comms"] = "Can be cleaned: Microsoft Teams/communication cache",
 
-                // === Spel & launchers ===
-                ["Steam"] = "Steam-data: flytta spel till annan disk via Steam → Inställningar → Nedladdningar",
-                ["EpicGamesLauncher"] = "Epic Games-cache: rensa Saved/webcache mappen",
-                ["Battle.net"] = "Battle.net-cache: rensa cache-mapp inuti",
-                ["Blizzard Entertainment"] = "Blizzard-cache: kan rensas via Battle.net-inställningar",
-                ["FortniteGame"] = "Fortnite-cache: kan bli stor, rensa via Epic Launcher verify",
-                ["Origin"] = "Origin/EA-cache: rensa via appens inställningar",
-                ["Razer"] = "Razer-data: cache kan rensas om Synapse inte körs",
+                // === Games & launchers ===
+                ["Steam"] = "Steam data: move games to another disk via Steam → Settings → Downloads",
+                ["EpicGamesLauncher"] = "Epic Games cache: clean the Saved/webcache folder",
+                ["Battle.net"] = "Battle.net cache: clean the cache folder inside",
+                ["Blizzard Entertainment"] = "Blizzard cache: can be cleaned via Battle.net settings",
+                ["FortniteGame"] = "Fortnite cache: can grow large, clean via Epic Launcher verify",
+                ["Origin"] = "Origin/EA cache: clean via app settings",
+                ["Razer"] = "Razer data: cache can be cleaned if Synapse is not running",
 
-                // === 3D/CAD/kreativa verktyg ===
-                ["Autodesk"] = "Autodesk-cache: rensa temp/cache-mappar, behåll licenser",
-                ["Fusion360"] = "Fusion 360-cache: kan bli stor, rensa offline-cache i appen",
-                ["BambuStudio"] = "Bambu Studio-cache: rensa via appens inställningar",
-                ["Creality Slicer"] = "Creality Slicer-cache: config/cache kan rensas",
-                ["cura"] = "Cura slicer-cache: rensa cache-mappen inuti",
-                ["UnrealEngine"] = "Unreal Engine: DerivedDataCache kan rensas, återskapas vid build",
-                ["UnrealEngineLauncher"] = "Kan rensas: Unreal Launcher-cache",
-                ["Edraw"] = "Edraw-data: cache kan rensas",
-                ["SketchUp"] = "SketchUp-cache: Components/cache kan rensas",
+                // === 3D/CAD/creative tools ===
+                ["Autodesk"] = "Autodesk cache: clean temp/cache folders, keep licenses",
+                ["Fusion360"] = "Fusion 360 cache: can grow large, clean offline cache in the app",
+                ["BambuStudio"] = "Bambu Studio cache: clean via app settings",
+                ["Creality Slicer"] = "Creality Slicer cache: config/cache can be cleaned",
+                ["cura"] = "Cura slicer cache: clean the cache folder inside",
+                ["UnrealEngine"] = "Unreal Engine: DerivedDataCache can be cleaned, recreated at build",
+                ["UnrealEngineLauncher"] = "Can be cleaned: Unreal Launcher cache",
+                ["Edraw"] = "Edraw data: cache can be cleaned",
+                ["SketchUp"] = "SketchUp cache: Components/cache can be cleaned",
 
                 // === Media & streaming ===
-                ["Spotify"] = "Spotify-cache: kan bli stor, rensa via Inställningar i appen",
-                ["Plex Media Server"] = "Plex-data: rensa cache/transcoding-mapp, kan bli mycket stor",
-                ["audacity"] = "Audacity temp-data: kan rensas om inga projekt är öppna",
+                ["Spotify"] = "Spotify cache: can grow large, clean via Settings in the app",
+                ["Plex Media Server"] = "Plex data: clean cache/transcoding folder, can be very large",
+                ["audacity"] = "Audacity temp data: can be cleaned if no projects are open",
 
-                // === Molnsynk & backup ===
-                ["OneDrive"] = "OneDrive-cache: rensa via OneDrive → Inställningar",
-                ["Backup"] = "Windows backup-data: rensa gamla säkerhetskopior om ej behövs",
+                // === Cloud sync & backup ===
+                ["OneDrive"] = "OneDrive cache: clean via OneDrive → Settings",
+                ["Backup"] = "Windows backup data: remove old backups if not needed",
 
-                // === Övrigt ===
-                ["Packages"] = "Windows Store-appar: avinstallera oanvända via Inställningar → Appar",
-                ["Microsoft"] = "Diverse Microsoft-appcache - rensa försiktigt",
-                ["Ollama"] = "Ollama AI-modeller: ta bort oanvända modeller med 'ollama rm'",
-                ["Postman"] = "Postman-data: rensa cache/historik via appens inställningar",
-                ["qBittorrent"] = "qBittorrent-data: rensa avslutade torrents",
-                ["Bluestacks"] = "BlueStacks Android-emulator: ta bort oanvända instanser",
-                ["BlueStacksSetup"] = "Kan rensas: gammal BlueStacks-installer",
-                ["TeamViewer"] = "TeamViewer-loggar: kan rensas om ej behövs",
-                ["FileZilla"] = "FileZilla-data: rensa sitemanager-cache",
-                ["Greenshot"] = "Greenshot-data: gammal screenshot-cache",
-                ["HueSync"] = "Philips Hue Sync-cache",
-                ["LogiBolt"] = "Logitech Bolt-data: cache kan rensas",
-                ["LogiOptionsPlus"] = "Logitech Options+-cache: kan rensas vid problem",
-                ["Logitech"] = "Logitech-cache/loggar: kan rensas",
-                ["paint.net"] = "paint.net-cache: kan rensas",
-                ["certify"] = "Certify SSL-cache: rensa gamla certifikat-loggar",
-                ["SquirrelTemp"] = "Kan rensas: uppdateringstemp från Squirrel-baserade appar",
-                ["netron-updater"] = "Kan rensas: Netron-uppdateringscache",
-                ["sidequest-updater"] = "Kan rensas: SideQuest VR-uppdateringscache",
-                ["vott-updater"] = "Kan rensas: VoTT-uppdateringscache",
-                ["EVGA"] = "EVGA Precision-data: cache/loggar kan rensas",
-                ["fontconfig"] = "Kan rensas: font-cache, återskapas automatiskt",
-                ["gtk-3.0"] = "Kan rensas: GTK-cache, återskapas automatiskt",
-                ["recently-used.xbel"] = "Kan rensas: senaste filer-historik",
-                ["dftmp"] = "Kan rensas: temporärdata",
-                ["cache"] = "Kan rensas: generell cache-mapp",
-                ["py-yfinance"] = "Kan rensas: Python yfinance-datacache",
-                ["nomic.ai"] = "Nomic AI-modelldata: ta bort oanvända modeller",
-                ["AnthropicClaude"] = "Claude Desktop-data: cache kan rensas",
-                ["claude-cli-nodejs"] = "Kan rensas: Claude CLI-cache",
-                ["AwesomeCopilot"] = "Kan rensas: Copilot-tilläggscache",
+                // === Miscellaneous ===
+                ["Packages"] = "Windows Store apps: uninstall unused apps via Settings → Apps",
+                ["Microsoft"] = "Various Microsoft app cache - clean carefully",
+                ["Ollama"] = "Ollama AI models: remove unused models with 'ollama rm'",
+                ["Postman"] = "Postman data: clean cache/history via app settings",
+                ["qBittorrent"] = "qBittorrent data: clean completed torrents",
+                ["Bluestacks"] = "BlueStacks Android emulator: remove unused instances",
+                ["BlueStacksSetup"] = "Can be cleaned: old BlueStacks installer",
+                ["TeamViewer"] = "TeamViewer logs: can be cleaned if not needed",
+                ["FileZilla"] = "FileZilla data: clean site manager cache",
+                ["Greenshot"] = "Greenshot data: old screenshot cache",
+                ["HueSync"] = "Philips Hue Sync cache",
+                ["LogiBolt"] = "Logitech Bolt data: cache can be cleaned",
+                ["LogiOptionsPlus"] = "Logitech Options+ cache: can be cleaned if issues occur",
+                ["Logitech"] = "Logitech cache/logs: can be cleaned",
+                ["paint.net"] = "paint.net cache: can be cleaned",
+                ["certify"] = "Certify SSL cache: clean old certificate logs",
+                ["SquirrelTemp"] = "Can be cleaned: update temp from Squirrel-based apps",
+                ["netron-updater"] = "Can be cleaned: Netron update cache",
+                ["sidequest-updater"] = "Can be cleaned: SideQuest VR update cache",
+                ["vott-updater"] = "Can be cleaned: VoTT update cache",
+                ["EVGA"] = "EVGA Precision data: cache/logs can be cleaned",
+                ["fontconfig"] = "Can be cleaned: font cache, recreated automatically",
+                ["gtk-3.0"] = "Can be cleaned: GTK cache, recreated automatically",
+                ["recently-used.xbel"] = "Can be cleaned: recent files history",
+                ["dftmp"] = "Can be cleaned: temporary data",
+                ["cache"] = "Can be cleaned: general cache folder",
+                ["py-yfinance"] = "Can be cleaned: Python yfinance data cache",
+                ["nomic.ai"] = "Nomic AI model data: remove unused models",
+                ["AnthropicClaude"] = "Claude Desktop data: cache can be cleaned",
+                ["claude-cli-nodejs"] = "Can be cleaned: Claude CLI cache",
+                ["AwesomeCopilot"] = "Can be cleaned: Copilot extension cache",
+            };
+
+            // Known CLI commands for direct cleanup (checked separately from the text hints)
+            var commandHints = new Dictionary<string, (string Command, string Title, string Difficulty)>(StringComparer.OrdinalIgnoreCase)
+            {
+                // === Package managers ===
+                ["pip"]            = ("pip cache purge",                    "Clean pip cache",             "Easy"),
+                ["npm-cache"]      = ("npm cache clean --force",            "Clean npm cache",             "Easy"),
+                ["yarn"]           = ("yarn cache clean",                   "Clean Yarn cache",            "Easy"),
+                ["NuGet"]          = ("dotnet nuget locals all --clear",    "Clear NuGet local caches",    "Easy"),
+                ["conda"]          = ("conda clean --all",                  "Clean Conda cache",           "Easy"),
+                // === Containers ===
+                ["Docker Desktop Installer"] = ("docker system prune -f",  "Prune Docker system (force)", "Medium"),
+                ["Docker"]         = ("docker system prune",                "Prune Docker system",         "Medium"),
+                // === AI models ===
+                ["Ollama"]         = ("ollama list",                        "List installed Ollama models (run 'ollama rm <name>' to delete)", "Easy"),
             };
 
             foreach (var folder in topFolders)
             {
-                // Find matching cleanup hint
+                // Find matching text hint
                 string? hint = null;
                 foreach (var kvp in cleanupHints)
                 {
@@ -284,14 +331,26 @@ public sealed class DiskAnalyzer : IAnalyzer
                 }
 
                 hint ??= folder.Size > 1L * 1024 * 1024 * 1024
-                    ? "Undersök om cache/temporärdata kan rensas"
+                    ? "Investigate if cache/temporary data can be cleaned"
                     : null;
+
+                // Find matching command hint → ActionStep
+                List<ActionStep>? actionSteps = null;
+                foreach (var kvp in commandHints)
+                {
+                    if (folder.Name.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        actionSteps = [new ActionStep(kvp.Value.Title, kvp.Value.Command, kvp.Value.Difficulty)];
+                        break;
+                    }
+                }
 
                 // Individual folders are informational only (Ok) - the total above carries the severity
                 results.Add(new AnalysisResult("Disk", $"AppData\\Local\\{folder.Name}",
                     $"  {folder.Name,-30} {ConsoleHelper.FormatBytes(folder.Size),10}",
                     Severity.Ok,
-                    hint));
+                    hint,
+                    actionSteps));
             }
         }
         catch
@@ -376,10 +435,10 @@ public sealed class DiskAnalyzer : IAnalyzer
 
             results.Add(new AnalysisResult(
                 "Disk",
-                "Disk-latens",
-                $"Läs: {readLatency * 1000:F1} ms, Skriv: {writeLatency * 1000:F1} ms",
+                "Disk latency",
+                $"Read: {readLatency * 1000:F1} ms, Write: {writeLatency * 1000:F1} ms",
                 severity,
-                severity != Severity.Ok ? "Hög disk-latens kan orsaka frysningar trots låg CPU" : null));
+                severity != Severity.Ok ? "High disk latency can cause freezes despite low CPU" : null));
         }
         catch { }
     }
@@ -402,10 +461,10 @@ public sealed class DiskAnalyzer : IAnalyzer
 
             results.Add(new AnalysisResult(
                 "Disk",
-                "Diskbelastning",
+                "Disk load",
                 $"Disk busy: {diskBusy:F1}%",
                 severity,
-                severity != Severity.Ok ? "Hög diskaktivitet kan ge trög respons även när CPU ser låg ut" : null));
+                severity != Severity.Ok ? "High disk activity can cause sluggish response even when CPU looks low" : null));
         }
         catch { }
     }
@@ -443,8 +502,8 @@ public sealed class DiskAnalyzer : IAnalyzer
             {
                 results.Add(new AnalysisResult(
                     "Disk",
-                    "I/O-process",
-                    $"{item!.ProcessName}: {ConsoleHelper.FormatBytes((long)item.TotalIo)} totalt I/O",
+                    "I/O process",
+                    $"{item!.ProcessName}: {ConsoleHelper.FormatBytes((long)item.TotalIo)} total I/O",
                     Severity.Ok));
             }
         }
@@ -470,9 +529,9 @@ public sealed class DiskAnalyzer : IAnalyzer
                 results.Add(new AnalysisResult(
                     "Disk",
                     "SMART-status",
-                    $"{instanceName}: {(predictFailure ? "FELPROGNOS" : "OK")}",
+                    $"{instanceName}: {(predictFailure ? "FAILURE PREDICTED" : "OK")}",
                     predictFailure ? Severity.Critical : Severity.Ok,
-                    predictFailure ? "Kritisk diskhälsa: säkerhetskopiera omedelbart och byt disk." : null));
+                    predictFailure ? "Critical disk health: back up immediately and replace disk." : null));
             }
         }
         catch { }
@@ -505,22 +564,22 @@ public sealed class DiskAnalyzer : IAnalyzer
             foreach (var disk in diskData)
             {
                 var mediaType = WmiHelper.GetValue<int>(disk, "MediaType");
-                var name = WmiHelper.GetValue<string>(disk, "FriendlyName") ?? "Okänd disk";
+                var name = WmiHelper.GetValue<string>(disk, "FriendlyName") ?? "Unknown disk";
 
                 string typeStr = mediaType switch
                 {
                     3 => "HDD",
                     4 => "SSD",
                     5 => "SCM",
-                    _ => "Okänd"
+                    _ => "Unknown"
                 };
 
                 var severity = mediaType == 3 ? Severity.Warning : Severity.Ok;
 
-                results.Add(new AnalysisResult("Disk", "Disktyp",
+                results.Add(new AnalysisResult("Disk", "Disk type",
                     $"{name}: {typeStr}",
                     severity,
-                    mediaType == 3 ? "En HDD kan orsaka långsamhet - uppgradera till SSD" : null));
+                    mediaType == 3 ? "An HDD can cause slowness - upgrade to SSD" : null));
             }
         }
         catch { }

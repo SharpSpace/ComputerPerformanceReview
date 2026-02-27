@@ -4,7 +4,7 @@ namespace ComputerPerformanceReview.Analyzers;
 
 public sealed class NetworkAnalyzer : IAnalyzer
 {
-    public string Name => "Nätverksanalys";
+    public string Name => "Network Analysis";
 
     public async Task<AnalysisReport> AnalyzeAsync()
     {
@@ -14,14 +14,14 @@ public sealed class NetworkAnalyzer : IAnalyzer
         AnalyzeActiveConnections(results);
         CheckBackgroundNetworkProcesses(results);
 
-        return new AnalysisReport("NÄTVERKSANALYS", results);
+        return new AnalysisReport("NETWORK ANALYSIS", results);
     }
 
     private static async Task AnalyzeNetworkThroughput(List<AnalysisResult> results)
     {
         try
         {
-            ConsoleHelper.WriteProgress("Mäter nätverkstrafik (2 sekunder)...");
+            ConsoleHelper.WriteProgress("Measuring network traffic (2 seconds)...");
 
             var interfaces = NetworkInterface.GetAllNetworkInterfaces()
                 .Where(ni => ni.OperationalStatus == OperationalStatus.Up
@@ -30,8 +30,8 @@ public sealed class NetworkAnalyzer : IAnalyzer
 
             if (interfaces.Count == 0)
             {
-                results.Add(new AnalysisResult("Nätverk", "Nätverksgränssnitt",
-                    "Inga aktiva nätverksgränssnitt hittades", Severity.Warning));
+                results.Add(new AnalysisResult("Network", "Network interfaces",
+                    "No active network interfaces found", Severity.Warning));
                 ConsoleHelper.ClearProgress();
                 return;
             }
@@ -72,12 +72,12 @@ public sealed class NetworkAnalyzer : IAnalyzer
                     _ => Severity.Ok
                 };
 
-                results.Add(new AnalysisResult("Nätverk", sample1[i].Name,
+                results.Add(new AnalysisResult("Network", sample1[i].Name,
                     $"{sample1[i].Name}: {mbps:F1} Mbps ({ConsoleHelper.FormatBytes(totalBytesPerSec)}/s) | " +
-                    $"Länkhastighet: {linkSpeedMbps:F0} Mbps",
+                    $"Link speed: {linkSpeedMbps:F0} Mbps",
                     severity,
                     severity != Severity.Ok
-                        ? "Hög nätverksanvändning kan påverka prestanda"
+                        ? "High network usage may affect performance"
                         : null));
             }
         }
@@ -101,10 +101,10 @@ public sealed class NetworkAnalyzer : IAnalyzer
                 _ => Severity.Ok
             };
 
-            results.Add(new AnalysisResult("Nätverk", "TCP-anslutningar",
-                $"Aktiva TCP-anslutningar: {established} etablerade av {tcpConnections.Length} totalt",
+            results.Add(new AnalysisResult("Network", "TCP connections",
+                $"Active TCP connections: {established} established of {tcpConnections.Length} total",
                 severity,
-                severity != Severity.Ok ? "Ovanligt många nätverksanslutningar" : null));
+                severity != Severity.Ok ? "Unusually many network connections" : null));
         }
         catch { }
     }
@@ -137,11 +137,11 @@ public sealed class NetworkAnalyzer : IAnalyzer
 
         if (unique.Count > 0)
         {
-            results.Add(new AnalysisResult("Nätverk", "Bakgrundssynk",
-                $"Nätverkstunga bakgrundsprocesser: {string.Join(", ", unique)}",
+            results.Add(new AnalysisResult("Network", "Background sync",
+                $"Network-heavy background processes: {string.Join(", ", unique)}",
                 unique.Count > 3 ? Severity.Warning : Severity.Ok,
                 unique.Count > 3
-                    ? "Många bakgrundsprocesser kan använda nätverket och disk samtidigt"
+                    ? "Many background processes may be using the network and disk simultaneously"
                     : null));
         }
     }

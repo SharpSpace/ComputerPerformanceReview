@@ -4,7 +4,7 @@ namespace ComputerPerformanceReview.Analyzers;
 
 public sealed class GpuAnalyzer : IAnalyzer
 {
-    public string Name => "Grafikanalys";
+    public string Name => "Graphics Analysis";
 
     public Task<AnalysisReport> AnalyzeAsync()
     {
@@ -13,7 +13,7 @@ public sealed class GpuAnalyzer : IAnalyzer
         AnalyzeGpuHardware(results);
         CheckHardwareAcceleration(results);
 
-        return Task.FromResult(new AnalysisReport("GRAFIKANALYS", results));
+        return Task.FromResult(new AnalysisReport("GRAPHICS ANALYSIS", results));
     }
 
     private static void AnalyzeGpuHardware(List<AnalysisResult> results)
@@ -25,25 +25,25 @@ public sealed class GpuAnalyzer : IAnalyzer
 
             if (gpuData.Count == 0)
             {
-                results.Add(new AnalysisResult("Grafik", "GPU",
-                    "Kunde inte läsa GPU-information", Severity.Warning));
+                results.Add(new AnalysisResult("Graphics", "GPU",
+                    "Could not read GPU information", Severity.Warning));
                 return;
             }
 
             foreach (var gpu in gpuData)
             {
-                var name = WmiHelper.GetValue<string>(gpu, "Name") ?? "Okänt grafikkort";
+                var name = WmiHelper.GetValue<string>(gpu, "Name") ?? "Unknown graphics card";
                 var adapterRam = WmiHelper.GetValue<long>(gpu, "AdapterRAM");
-                var driverVersion = WmiHelper.GetValue<string>(gpu, "DriverVersion") ?? "Okänd";
+                var driverVersion = WmiHelper.GetValue<string>(gpu, "DriverVersion") ?? "Unknown";
                 var driverDateStr = WmiHelper.GetValue<string>(gpu, "DriverDate");
-                var status = WmiHelper.GetValue<string>(gpu, "Status") ?? "Okänd";
+                var status = WmiHelper.GetValue<string>(gpu, "Status") ?? "Unknown";
 
                 string vramStr = adapterRam > 0
                     ? ConsoleHelper.FormatBytes(adapterRam)
-                    : "Okänt";
+                    : "Unknown";
 
-                results.Add(new AnalysisResult("Grafik", "GPU",
-                    $"{name} ({vramStr} VRAM) | Drivrutin: {driverVersion} | Status: {status}",
+                results.Add(new AnalysisResult("Graphics", "GPU",
+                    $"{name} ({vramStr} VRAM) | Driver: {driverVersion} | Status: {status}",
                     status == "OK" ? Severity.Ok : Severity.Warning));
 
                 // Check driver age
@@ -60,10 +60,10 @@ public sealed class GpuAnalyzer : IAnalyzer
                             _ => Severity.Ok
                         };
 
-                        results.Add(new AnalysisResult("Grafik", "Drivrutinsålder",
-                            $"Drivrutin installerad: {driverDate:yyyy-MM-dd} ({driverAge.Days} dagar sedan)",
+                        results.Add(new AnalysisResult("Graphics", "Driver age",
+                            $"Driver installed: {driverDate:yyyy-MM-dd} ({driverAge.Days} days ago)",
                             severity,
-                            severity != Severity.Ok ? "Uppdatera grafikkortets drivrutin" : null));
+                            severity != Severity.Ok ? "Update the graphics card driver" : null));
                     }
                     catch { }
                 }
@@ -82,16 +82,16 @@ public sealed class GpuAnalyzer : IAnalyzer
                 var value = key.GetValue("DisableHWAcceleration");
                 if (value is int intVal && intVal == 1)
                 {
-                    results.Add(new AnalysisResult("Grafik", "Hårdvaruacceleration",
-                        "Hårdvaruacceleration är INAKTIVERAD (WPF)",
+                    results.Add(new AnalysisResult("Graphics", "Hardware acceleration",
+                        "Hardware acceleration is DISABLED (WPF)",
                         Severity.Warning,
-                        "Aktivera hårdvaruacceleration för bättre gränssnittsprestanda"));
+                        "Enable hardware acceleration for better UI performance"));
                     return;
                 }
             }
 
-            results.Add(new AnalysisResult("Grafik", "Hårdvaruacceleration",
-                "Hårdvaruacceleration verkar vara aktiverad", Severity.Ok));
+            results.Add(new AnalysisResult("Graphics", "Hardware acceleration",
+                "Hardware acceleration appears to be enabled", Severity.Ok));
         }
         catch { }
     }

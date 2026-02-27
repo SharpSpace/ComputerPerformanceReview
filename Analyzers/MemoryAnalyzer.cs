@@ -2,7 +2,7 @@ namespace ComputerPerformanceReview.Analyzers;
 
 public sealed class MemoryAnalyzer : IAnalyzer
 {
-    public string Name => "Minnesanalys";
+    public string Name => "Memory Analysis";
 
     public async Task<AnalysisReport> AnalyzeAsync()
     {
@@ -13,7 +13,7 @@ public sealed class MemoryAnalyzer : IAnalyzer
         await DetectMemoryLeaks(results);
         AnalyzeCommittedMemory(results);
 
-        return new AnalysisReport("MINNESANALYS", results);
+        return new AnalysisReport("MEMORY ANALYSIS", results);
     }
 
     private static void AnalyzeRamUsage(List<AnalysisResult> results)
@@ -29,9 +29,9 @@ public sealed class MemoryAnalyzer : IAnalyzer
         long usedKb = totalKb - freeKb;
         double usedPercent = (double)usedKb / totalKb * 100;
 
-        string desc = $"Totalt RAM: {ConsoleHelper.FormatBytes(totalKb * 1024)} | " +
-                      $"Använt: {ConsoleHelper.FormatBytes(usedKb * 1024)} | " +
-                      $"Tillgängligt: {ConsoleHelper.FormatBytes(freeKb * 1024)} ({usedPercent:F1}% använt)";
+        string desc = $"Total RAM: {ConsoleHelper.FormatBytes(totalKb * 1024)} | " +
+                      $"Used: {ConsoleHelper.FormatBytes(usedKb * 1024)} | " +
+                      $"Available: {ConsoleHelper.FormatBytes(freeKb * 1024)} ({usedPercent:F1}% used)";
 
         var severity = usedPercent switch
         {
@@ -42,12 +42,12 @@ public sealed class MemoryAnalyzer : IAnalyzer
 
         string? rec = severity switch
         {
-            Severity.Critical => "Stäng oanvända program för att frigöra minne",
-            Severity.Warning => "Minnesanvändningen är hög, överväg att stänga program",
+            Severity.Critical => "Close unused programs to free memory",
+            Severity.Warning => "Memory usage is high, consider closing programs",
             _ => null
         };
 
-        results.Add(new AnalysisResult("Minne", "RAM-användning", desc, severity, rec));
+        results.Add(new AnalysisResult("Memory", "RAM usage", desc, severity, rec));
     }
 
     private static void AnalyzeTopMemoryProcesses(List<AnalysisResult> results)
@@ -72,29 +72,29 @@ public sealed class MemoryAnalyzer : IAnalyzer
         var topList = string.Join(", ", topProcesses.Take(5)
             .Select(p => $"{p.Name} ({ConsoleHelper.FormatBytes(p.Memory)})"));
 
-        results.Add(new AnalysisResult("Minne", "Topp minnesanvändare",
-            $"Topp 5: {topList}", Severity.Ok));
+        results.Add(new AnalysisResult("Memory", "Top memory consumers",
+            $"Top 5: {topList}", Severity.Ok));
 
         foreach (var proc in topProcesses.Where(p => p.Memory > 4L * 1024 * 1024 * 1024))
         {
-            results.Add(new AnalysisResult("Minne", "Hög minnesanvändning",
-                $"{proc.Name} använder {ConsoleHelper.FormatBytes(proc.Memory)}",
+            results.Add(new AnalysisResult("Memory", "High memory usage",
+                $"{proc.Name} is using {ConsoleHelper.FormatBytes(proc.Memory)}",
                 Severity.Critical,
-                $"Starta om {proc.Name} för att frigöra minne"));
+                $"Restart {proc.Name} to free memory"));
         }
 
         foreach (var proc in topProcesses.Where(p => p.Memory > 2L * 1024 * 1024 * 1024 && p.Memory <= 4L * 1024 * 1024 * 1024))
         {
-            results.Add(new AnalysisResult("Minne", "Hög minnesanvändning",
-                $"{proc.Name} använder {ConsoleHelper.FormatBytes(proc.Memory)}",
+            results.Add(new AnalysisResult("Memory", "High memory usage",
+                $"{proc.Name} is using {ConsoleHelper.FormatBytes(proc.Memory)}",
                 Severity.Warning,
-                $"Överväg att starta om {proc.Name}"));
+                $"Consider restarting {proc.Name}"));
         }
     }
 
     private static async Task DetectMemoryLeaks(List<AnalysisResult> results)
     {
-        ConsoleHelper.WriteProgress("Mäter minnesläckor (10 sekunder)...");
+        ConsoleHelper.WriteProgress("Measuring memory leaks (10 seconds)...");
 
         var snapshot1 = new Dictionary<int, (string Name, long Memory)>();
         foreach (var proc in Process.GetProcesses())
@@ -132,19 +132,19 @@ public sealed class MemoryAnalyzer : IAnalyzer
 
         if (leaks.Count == 0)
         {
-            results.Add(new AnalysisResult("Minne", "Minnesläckor",
-                "Inga potentiella minnesläckor upptäcktes under mätperioden", Severity.Ok));
+            results.Add(new AnalysisResult("Memory", "Memory leaks",
+                "No potential memory leaks detected during the measurement period", Severity.Ok));
         }
         else
         {
             foreach (var leak in leaks.OrderByDescending(l => l.GrowthBytes))
             {
                 var severity = leak.GrowthBytes > 200 * 1024 * 1024 ? Severity.Critical : Severity.Warning;
-                results.Add(new AnalysisResult("Minne", "Potentiell minnesläcka",
-                    $"{leak.Name} ökade med {ConsoleHelper.FormatBytes(leak.GrowthBytes)} på 10 sekunder " +
+                results.Add(new AnalysisResult("Memory", "Potential memory leak",
+                    $"{leak.Name} grew by {ConsoleHelper.FormatBytes(leak.GrowthBytes)} in 10 seconds " +
                     $"({ConsoleHelper.FormatBytes(leak.MemoryBytesFirst)} → {ConsoleHelper.FormatBytes(leak.MemoryBytesSecond)})",
                     severity,
-                    $"Starta om {leak.Name} för att åtgärda minnesläckan"));
+                    $"Restart {leak.Name} to fix the memory leak"));
             }
         }
     }
@@ -169,9 +169,9 @@ public sealed class MemoryAnalyzer : IAnalyzer
             _ => Severity.Ok
         };
 
-        results.Add(new AnalysisResult("Minne", "Committed minne",
+        results.Add(new AnalysisResult("Memory", "Committed memory",
             $"Committed: {ConsoleHelper.FormatBytes(usedKb * 1024)} / {ConsoleHelper.FormatBytes(totalKb * 1024)} ({usedPercent:F1}%)",
             severity,
-            severity != Severity.Ok ? "Systemets virtuella minne är högt belastat" : null));
+            severity != Severity.Ok ? "System virtual memory is under heavy load" : null));
     }
 }

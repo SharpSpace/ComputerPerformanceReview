@@ -1,20 +1,20 @@
 namespace ComputerPerformanceReview.Interfaces;
 
 /// <summary>
-/// Interface för domänspecifika hälsoanalysatorer i SystemHealthEngine.
-/// Varje sub-analyzer ansvarar för att samla in och analysera en specifik domän.
+/// Interface for domain-specific health analyzers in SystemHealthEngine.
+/// Each sub-analyzer is responsible for collecting and analyzing a specific domain.
 /// </summary>
 public interface IHealthSubAnalyzer
 {
     string Domain { get; }
 
     /// <summary>
-    /// Samla in rådata via WMI/Process API och populera relevanta fält i buildern.
+    /// Collect raw data via WMI/Process API and populate relevant fields in the builder.
     /// </summary>
     void Collect(MonitorSampleBuilder builder);
 
     /// <summary>
-    /// Analysera aktuellt sample mot historiken, returnera hälsopoäng och eventuella händelser.
+    /// Analyze the current sample against the history, return health score and any new events.
     /// </summary>
     HealthAssessment Analyze(MonitorSample current, IReadOnlyList<MonitorSample> history);
 }

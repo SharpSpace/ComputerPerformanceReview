@@ -87,12 +87,12 @@ public sealed class CpuSchedulerHealthAnalyzer : IHealthSubAnalyzer
                 healthScore -= isCritical ? 25 : 10;
 
                 string tip = topProc is not null
-                    ? $"Öppna Aktivitetshanteraren → högerklicka på {topProc.Name} → Avsluta aktivitet. Om det händer ofta, avinstallera/uppdatera programmet."
-                    : "Öppna Aktivitetshanteraren (Ctrl+Shift+Esc) och sortera på CPU för att se vilken process som orsakar lasten.";
+                    ? $"Open Task Manager → right-click {topProc.Name} → End task. If this happens frequently, uninstall/update the program."
+                    : "Open Task Manager (Ctrl+Shift+Esc) and sort by CPU to identify which process is causing the load.";
 
                 events.Add(new MonitorEvent(
                     DateTime.Now, "CpuSpike",
-                    $"CPU-spik: {current.CpuPercent:F0}% i {_consecutiveHighCpu * 3} sekunder{procInfo}",
+                    $"CPU spike: {current.CpuPercent:F0}% for {_consecutiveHighCpu * 3} seconds{procInfo}",
                     isCritical ? "Critical" : "Warning", tip));
             }
         }
@@ -111,13 +111,13 @@ public sealed class CpuSchedulerHealthAnalyzer : IHealthSubAnalyzer
                 healthScore -= isCritical ? 30 : 15;
                 events.Add(new MonitorEvent(
                     DateTime.Now, "DpcStorm",
-                    $"DPC-storm: {current.DpcTimePercent:F1}% DPC-tid + {current.InterruptTimePercent:F1}% interrupt-tid",
+                    $"DPC storm: {current.DpcTimePercent:F1}% DPC time + {current.InterruptTimePercent:F1}% interrupt time",
                     isCritical ? "Critical" : "Warning",
-                    "Hög DPC-tid indikerar ett drivrutinsproblem (vanligast: nätverk, GPU, USB, lagring). "
-                    + "ÅTGÄRDER: 1) Uppdatera ALLA drivrutiner via tillverkarens hemsida. "
-                    + "2) Kör 'LatencyMon' (gratis) för att identifiera exakt vilken drivrutin. "
-                    + "3) Prova koppla bort USB-enheter en åt gången för att isolera problemet. "
-                    + "4) Kontrollera att BIOS/firmware är uppdaterad."));
+                    "High DPC time indicates a driver problem (most common: network, GPU, USB, storage). "
+                    + "ACTIONS: 1) Update ALL drivers via the manufacturer's website. "
+                    + "2) Run 'LatencyMon' (free) to identify exactly which driver. "
+                    + "3) Try disconnecting USB devices one at a time to isolate the problem. "
+                    + "4) Check that BIOS/firmware is up to date."));
             }
         }
         else
@@ -136,11 +136,11 @@ public sealed class CpuSchedulerHealthAnalyzer : IHealthSubAnalyzer
                 healthScore -= isCritical ? 20 : 10;
                 events.Add(new MonitorEvent(
                     DateTime.Now, "SchedulerContention",
-                    $"Scheduler-trängsel: CPU {current.CpuPercent:F0}% men processorkö = {current.ProcessorQueueLength} (borde vara < {2 * cores})",
+                    $"Scheduler contention: CPU {current.CpuPercent:F0}% but processor queue = {current.ProcessorQueueLength} (should be < {2 * cores})",
                     isCritical ? "Critical" : "Warning",
-                    $"Processorns kö är lång ({current.ProcessorQueueLength}) trots låg CPU ({current.CpuPercent:F0}%). "
-                    + "Trådar väntar på CPU-tid. Trolig orsak: för många aktiva processer eller en process som blockerar schedulern. "
-                    + "Kontrollera processprioriteringar i Aktivitetshanteraren och minska antalet aktiva program."));
+                    $"Processor queue is long ({current.ProcessorQueueLength}) despite low CPU ({current.CpuPercent:F0}%). "
+                    + "Threads are waiting for CPU time. Likely cause: too many active processes or a process blocking the scheduler. "
+                    + "Check process priorities in Task Manager and reduce active programs."));
             }
         }
         else
@@ -161,9 +161,9 @@ public sealed class CpuSchedulerHealthAnalyzer : IHealthSubAnalyzer
                     healthScore -= 15;
                     events.Add(new MonitorEvent(
                         DateTime.Now, "CpuThrottle",
-                        $"CPU-throttling: {current.CpuClockMHz:F0}/{current.CpuMaxClockMHz:F0} MHz ({ratio * 100:F0}%) vid {current.CpuPercent:F0}% last",
+                        $"CPU throttling: {current.CpuClockMHz:F0}/{current.CpuMaxClockMHz:F0} MHz ({ratio * 100:F0}%) at {current.CpuPercent:F0}% load",
                         ratio < 0.4 ? "Critical" : "Warning",
-                        "Processorn går med låg frekvens under belastning. Kontrollera temperaturer, strömplan, BIOS-inställningar och kylning."));
+                        "CPU running at low frequency under load. Check temperatures, power plan, BIOS settings, and cooling."));
                 }
             }
             else
@@ -177,11 +177,11 @@ public sealed class CpuSchedulerHealthAnalyzer : IHealthSubAnalyzer
 
         string? hint = null;
         if (current.DpcTimePercent > DpcStormThreshold)
-            hint = "Drivrutinsproblem: hög DPC-tid indikerar en drivrutin som blockerar processorn";
+            hint = "Driver problem: high DPC time indicates a driver blocking the processor";
         else if (current.CpuMaxClockMHz > 0 && current.CpuClockMHz / current.CpuMaxClockMHz < 0.6 && current.CpuPercent > 40)
-            hint = "CPU-throttling: låg klockfrekvens under belastning";
+            hint = "CPU throttling: low clock frequency under load";
         else if (healthScore < 50)
-            hint = "CPU-mättnad eller scheduler-trängsel";
+            hint = "CPU saturation or scheduler contention";
 
         return new HealthAssessment(
             new HealthScore(Domain, healthScore, confidence, hint),

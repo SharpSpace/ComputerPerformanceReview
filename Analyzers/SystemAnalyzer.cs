@@ -4,7 +4,7 @@ namespace ComputerPerformanceReview.Analyzers;
 
 public sealed class SystemAnalyzer : IAnalyzer
 {
-    public string Name => "Systemkontroller";
+    public string Name => "System Checks";
 
     public Task<AnalysisReport> AnalyzeAsync()
     {
@@ -17,7 +17,7 @@ public sealed class SystemAnalyzer : IAnalyzer
         CheckLastUpdate(results);
         CheckAdminStatus(results);
 
-        return Task.FromResult(new AnalysisReport("SYSTEMKONTROLLER", results));
+        return Task.FromResult(new AnalysisReport("SYSTEM CHECKS", results));
     }
 
     private static void AnalyzePageFileLocation(List<AnalysisResult> results)
@@ -40,10 +40,10 @@ public sealed class SystemAnalyzer : IAnalyzer
 
             results.Add(new AnalysisResult(
                 "System",
-                "Växlingsfil plats",
+                "Page file location",
                 $"Pagefile: {string.Join(", ", locations)}",
                 Severity.Ok,
-                "Om växlingsfilen ligger på HDD kan det orsaka tröghet vid minnestryck."));
+                "If the page file is on an HDD it may cause sluggishness under memory pressure."));
         }
         catch { }
     }
@@ -62,8 +62,8 @@ public sealed class SystemAnalyzer : IAnalyzer
             var uptime = DateTime.Now - lastBoot;
 
             string uptimeStr = uptime.Days > 0
-                ? $"{uptime.Days} dagar, {uptime.Hours} timmar"
-                : $"{uptime.Hours} timmar, {uptime.Minutes} minuter";
+                ? $"{uptime.Days} days, {uptime.Hours} hours"
+                : $"{uptime.Hours} hours, {uptime.Minutes} minutes";
 
             var severity = uptime.TotalDays switch
             {
@@ -72,11 +72,11 @@ public sealed class SystemAnalyzer : IAnalyzer
                 _ => Severity.Ok
             };
 
-            results.Add(new AnalysisResult("System", "Drifttid",
-                $"Datorn har varit igång i {uptimeStr} sedan {lastBoot:yyyy-MM-dd HH:mm}",
+            results.Add(new AnalysisResult("System", "Uptime",
+                $"Computer has been running for {uptimeStr} since {lastBoot:yyyy-MM-dd HH:mm}",
                 severity,
                 severity != Severity.Ok
-                    ? "Starta om datorn regelbundet för att frigöra resurser och installera uppdateringar"
+                    ? "Restart the computer regularly to free resources and install updates"
                     : null));
         }
         catch { }
@@ -105,11 +105,11 @@ public sealed class SystemAnalyzer : IAnalyzer
                     _ => Severity.Ok
                 };
 
-                results.Add(new AnalysisResult("System", "Växlingsfil",
-                    $"Växlingsfilanvändning: {current} MB / {allocated} MB ({usedPercent:F1}%)",
+                results.Add(new AnalysisResult("System", "Page file",
+                    $"Page file usage: {current} MB / {allocated} MB ({usedPercent:F1}%)",
                     severity,
                     severity != Severity.Ok
-                        ? "Hög växlingsfilanvändning indikerar minnesbrist - stäng program eller utöka RAM"
+                        ? "High page file usage indicates memory shortage - close programs or add more RAM"
                         : null));
             }
         }
@@ -128,15 +128,25 @@ public sealed class SystemAnalyzer : IAnalyzer
 
             if (rebootPending)
             {
-                results.Add(new AnalysisResult("System", "Väntande omstart",
-                    "En omstart krävs för att slutföra uppdateringar",
+                results.Add(new AnalysisResult("System", "Pending restart",
+                    "A restart is required to complete updates",
                     Severity.Critical,
-                    "Starta om datorn för att slutföra väntande uppdateringar"));
+                    "Restart the computer to complete pending updates",
+                    [
+                        new ActionStep(
+                            "Schedule a restart in 60 seconds (runs in cmd)",
+                            "shutdown.exe /r /t 60",
+                            "Easy"),
+                        new ActionStep(
+                            "Cancel a scheduled restart",
+                            "shutdown.exe /a",
+                            "Easy"),
+                    ]));
             }
             else
             {
-                results.Add(new AnalysisResult("System", "Väntande omstart",
-                    "Ingen omstart krävs", Severity.Ok));
+                results.Add(new AnalysisResult("System", "Pending restart",
+                    "No restart required", Severity.Ok));
             }
         }
         catch { }
@@ -152,7 +162,7 @@ public sealed class SystemAnalyzer : IAnalyzer
             if (updates.Count == 0)
             {
                 results.Add(new AnalysisResult("System", "Windows Update",
-                    "Kunde inte läsa uppdateringshistorik", Severity.Warning));
+                    "Could not read update history", Severity.Warning));
                 return;
             }
 
@@ -177,10 +187,19 @@ public sealed class SystemAnalyzer : IAnalyzer
                     _ => Severity.Ok
                 };
 
-                results.Add(new AnalysisResult("System", "Senaste Windows Update",
-                    $"Senaste uppdatering installerades {latestDate:yyyy-MM-dd} ({daysSince:F0} dagar sedan)",
+                results.Add(new AnalysisResult("System", "Latest Windows Update",
+                    $"Latest update installed {latestDate:yyyy-MM-dd} ({daysSince:F0} days ago)",
                     severity,
-                    severity != Severity.Ok ? "Sök efter och installera Windows-uppdateringar" : null));
+                    severity != Severity.Ok ? "Search for and install Windows updates" : null,
+                    severity != Severity.Ok
+                        ?
+                        [
+                            new ActionStep(
+                                "Open Windows Update settings",
+                                "start ms-settings:windowsupdate",
+                                "Easy"),
+                        ]
+                        : null));
             }
         }
         catch { }
@@ -196,10 +215,10 @@ public sealed class SystemAnalyzer : IAnalyzer
 
             if (!isAdmin)
             {
-                results.Add(new AnalysisResult("System", "Behörighet",
-                    "Körs utan administratörsbehörighet - viss information kan vara begränsad",
+                results.Add(new AnalysisResult("System", "Permissions",
+                    "Running without administrator privileges - some information may be limited",
                     Severity.Warning,
-                    "Kör som administratör för fullständig analys"));
+                    "Run as administrator for full analysis"));
             }
         }
         catch { }

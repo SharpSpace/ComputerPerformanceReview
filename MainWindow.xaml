@@ -1,0 +1,14 @@
+<Window x:Class="ComputerPerformanceReview.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:ComputerPerformanceReview.ViewModels"
+        Title="{Binding Title}"
+        Style="{StaticResource AppWindowStyle}"
+        Width="1100" Height="800"
+        WindowStartupLocation="CenterScreen">
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <ContentControl Content="{Binding CurrentView}"/>
+</Window>

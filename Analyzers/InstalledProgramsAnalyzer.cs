@@ -5,43 +5,43 @@ namespace ComputerPerformanceReview.Analyzers;
 /// </summary>
 public sealed class InstalledProgramsAnalyzer : IAnalyzer
 {
-    public string Name => "Installerade program";
+    public string Name => "Installed Programs";
 
     // Known bloatware patterns
     private static readonly Dictionary<string, string> BloatwarePatterns = new(StringComparer.OrdinalIgnoreCase)
     {
         // OEM Bloatware
-        ["HP Support Assistant"] = "HP bloatware - kan avinstalleras",
-        ["HP Documentation"] = "HP bloatware - kan avinstalleras",
-        ["HP JumpStart"] = "HP bloatware - kan avinstalleras",
-        ["Lenovo Vantage"] = "Lenovo verktyg - kan avinstalleras om ej använt",
-        ["Lenovo Welcome"] = "Lenovo bloatware - kan avinstalleras",
-        ["Dell SupportAssist"] = "Dell verktyg - behålls endast om du använder support",
-        ["Asus Giftbox"] = "Asus bloatware - kan avinstalleras",
-        
+        ["HP Support Assistant"] = "HP bloatware - can be uninstalled",
+        ["HP Documentation"] = "HP bloatware - can be uninstalled",
+        ["HP JumpStart"] = "HP bloatware - can be uninstalled",
+        ["Lenovo Vantage"] = "Lenovo tool - can be uninstalled if not used",
+        ["Lenovo Welcome"] = "Lenovo bloatware - can be uninstalled",
+        ["Dell SupportAssist"] = "Dell tool - keep only if you use support",
+        ["Asus Giftbox"] = "Asus bloatware - can be uninstalled",
+
         // Trial antivirus
-        ["McAfee"] = "Trial-antivirus - avinstallera om du har annat skydd",
-        ["Norton"] = "Trial-antivirus - avinstallera om du har annat skydd",
-        ["AVG"] = "Antivirus - behåll endast ett antivirusprogram",
-        ["Avast"] = "Antivirus - behåll endast ett antivirusprogram",
-        
+        ["McAfee"] = "Trial antivirus - uninstall if you have other protection",
+        ["Norton"] = "Trial antivirus - uninstall if you have other protection",
+        ["AVG"] = "Antivirus - keep only one antivirus program",
+        ["Avast"] = "Antivirus - keep only one antivirus program",
+
         // Unnecessary utilities
-        ["CCleaner"] = "Diskrensnare - Windows inbyggda verktyg räcker ofta",
-        ["PC Cleaner"] = "Potentiell skräpprogram",
-        ["Driver Booster"] = "Driver-uppdaterare - ofta onödig",
-        ["WinZip"] = "Arkiverare - Windows har inbyggt stöd",
-        ["WinRAR"] = "Arkiverare - 7-Zip är gratis alternativ",
-        
+        ["CCleaner"] = "Disk cleaner - Windows built-in tools are often sufficient",
+        ["PC Cleaner"] = "Potentially unwanted program",
+        ["Driver Booster"] = "Driver updater - often unnecessary",
+        ["WinZip"] = "Archiver - Windows has built-in support",
+        ["WinRAR"] = "Archiver - 7-Zip is a free alternative",
+
         // Launchers (optional - not bloat per se)
-        ["Steam"] = "Spellauncher - kan inaktiveras från autostart",
-        ["Epic Games Launcher"] = "Spellauncher - kan inaktiveras från autostart",
-        ["Origin"] = "Spellauncher - kan inaktiveras från autostart",
-        ["Battle.net"] = "Spellauncher - kan inaktiveras från autostart",
-        
+        ["Steam"] = "Game launcher - can be disabled from startup",
+        ["Epic Games Launcher"] = "Game launcher - can be disabled from startup",
+        ["Origin"] = "Game launcher - can be disabled from startup",
+        ["Battle.net"] = "Game launcher - can be disabled from startup",
+
         // Updaters
-        ["Adobe Updater"] = "Updater - kan inaktiveras från autostart",
-        ["Java Update"] = "Updater - kan inaktiveras från autostart",
-        ["QuickTime"] = "Media player - sällan nödvändig idag"
+        ["Adobe Updater"] = "Updater - can be disabled from startup",
+        ["Java Update"] = "Updater - can be disabled from startup",
+        ["QuickTime"] = "Media player - rarely needed today"
     };
 
     public async Task<AnalysisReport> AnalyzeAsync()
@@ -62,9 +62,9 @@ public sealed class InstalledProgramsAnalyzer : IAnalyzer
             .ToList();
 
         results.Add(new AnalysisResult(
-            "Program",
-            "Totalt antal program",
-            $"{unique.Count} installerade program hittades",
+            "Programs",
+            "Total program count",
+            $"{unique.Count} installed programs found",
             Severity.Ok));
 
         // Check for bloatware
@@ -93,19 +93,19 @@ public sealed class InstalledProgramsAnalyzer : IAnalyzer
         if (antivirusPrograms.Count > 1)
         {
             results.Add(new AnalysisResult(
-                "Program",
-                "Flera antivirusprogram",
-                $"Flera antivirusprogram upptäckta: {string.Join(", ", antivirusPrograms)}",
+                "Programs",
+                "Multiple antivirus programs",
+                $"Multiple antivirus programs detected: {string.Join(", ", antivirusPrograms)}",
                 Severity.Critical,
-                "Att ha flera antivirusprogram samtidigt kan ge konflikter och sänkt prestanda. " +
-                "Behåll endast ett (eller använd Windows Defender). " +
-                "Avinstallera via: Inställningar → Appar → Installerade appar → Sök efter programmet → Avinstallera.",
+                "Having multiple antivirus programs simultaneously can cause conflicts and reduced performance. " +
+                "Keep only one (or use Windows Defender). " +
+                "Uninstall via: Settings → Apps → Installed apps → Search for the program → Uninstall.",
                 new List<ActionStep>
                 {
-                    new("Öppna Inställningar → Appar → Installerade appar"),
-                    new("Sök efter antivirusprogrammet", null, "Lätt"),
-                    new("Klicka på de tre punkterna → Avinstallera", null, "Lätt"),
-                    new("Följ avinstallationsguiden", null, "Lätt")
+                    new("Open Settings → Apps → Installed apps"),
+                    new("Search for the antivirus program", null, "Easy"),
+                    new("Click the three dots → Uninstall", null, "Easy"),
+                    new("Follow the uninstall wizard", null, "Easy")
                 }));
         }
 
@@ -120,19 +120,19 @@ public sealed class InstalledProgramsAnalyzer : IAnalyzer
             };
 
             results.Add(new AnalysisResult(
-                "Program",
-                "Potentiell bloatware",
-                $"{bloatwareFound.Count} program som kan vara onödiga",
+                "Programs",
+                "Potential bloatware",
+                $"{bloatwareFound.Count} programs that may be unnecessary",
                 severity,
                 severity != Severity.Ok
-                    ? "Dessa program kan ofta avinstalleras för att frigöra diskutrymme och systemresurser."
+                    ? "These programs can often be uninstalled to free disk space and system resources."
                     : null));
 
             // List first 10 bloatware items
             foreach (var (name, reason) in bloatwareFound.Take(10))
             {
                 results.Add(new AnalysisResult(
-                    "Program",
+                    "Programs",
                     name,
                     reason,
                     Severity.Ok));
@@ -141,22 +141,22 @@ public sealed class InstalledProgramsAnalyzer : IAnalyzer
             if (bloatwareFound.Count > 10)
             {
                 results.Add(new AnalysisResult(
-                    "Program",
-                    "Fler program",
-                    $"... och {bloatwareFound.Count - 10} till",
+                    "Programs",
+                    "More programs",
+                    $"... and {bloatwareFound.Count - 10} more",
                     Severity.Ok));
             }
         }
         else
         {
             results.Add(new AnalysisResult(
-                "Program",
-                "Bloatware-kontroll",
-                "Inga uppenbara bloatware-program hittades",
+                "Programs",
+                "Bloatware check",
+                "No obvious bloatware programs found",
                 Severity.Ok));
         }
 
-        return new AnalysisReport("INSTALLERADE PROGRAM", results);
+        return new AnalysisReport("INSTALLED PROGRAMS", results);
     }
 
     private static void ReadInstalledPrograms(List<(string Name, string Publisher)> programs)

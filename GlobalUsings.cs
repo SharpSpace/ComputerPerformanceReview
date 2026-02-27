@@ -1,5 +1,7 @@
 global using System.Diagnostics;
+global using System.IO;
 global using System.Management;
+global using System.Net.Http;
 global using ComputerPerformanceReview.Analyzers;
 global using ComputerPerformanceReview.Analyzers.Health;
 global using ComputerPerformanceReview.Helpers;

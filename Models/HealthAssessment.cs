@@ -1,7 +1,7 @@
 namespace ComputerPerformanceReview.Models;
 
 /// <summary>
-/// Resultat från en sub-analyzer: hälsopoäng + eventuella nya händelser.
+/// Result from a sub-analyzer: health score + any new events.
 /// </summary>
 public sealed record HealthAssessment(
     HealthScore Score,

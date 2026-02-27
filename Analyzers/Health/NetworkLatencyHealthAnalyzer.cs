@@ -36,15 +36,15 @@ public sealed class NetworkLatencyHealthAnalyzer : IHealthSubAnalyzer
                 events.Add(new MonitorEvent(
                     DateTime.Now,
                     "DnsLatency",
-                    $"Hög DNS-latens: {current.DnsLatencyMs:F0} ms",
+                    $"High DNS latency: {current.DnsLatencyMs:F0} ms",
                     critical ? "Critical" : "Warning",
-                    "Hög DNS-latens kan ge UI-häng i appar som väntar på nätverk. " +
-                    "ÅTGÄRDER: " +
-                    "1) Byt DNS-server till snabbare alternativ: Öppna Nätverksinställningar → Ändra adapterkonfiguration → Högerklicka på nätverket → Egenskaper → Internet Protocol Version 4 → Använd följande DNS-servrar: Primär 1.1.1.1 (Cloudflare) eller 8.8.8.8 (Google), Sekundär 1.0.0.1 eller 8.8.4.4. " +
-                    "2) Kontrollera routern: Starta om routern, uppdatera firmware. " +
-                    "3) Rensa DNS-cache: Öppna Kommandotolken som admin → Kör 'ipconfig /flushdns'. " +
-                    "4) Inaktivera VPN tillfälligt för att se om det är orsaken. " +
-                    "5) Kontrollera om antivirusprogram blockerar eller skannar nätverkstrafik."));
+                    "High DNS latency can cause UI hangs in apps waiting for network. " +
+                    "ACTIONS: " +
+                    "1) Switch DNS server to a faster alternative: Open Network Settings → Change adapter options → Right-click network → Properties → Internet Protocol Version 4 → Use the following DNS servers: Primary 1.1.1.1 (Cloudflare) or 8.8.8.8 (Google), Secondary 1.0.0.1 or 8.8.4.4. " +
+                    "2) Check router: Restart the router, update firmware. " +
+                    "3) Flush DNS cache: Open Command Prompt as admin → Run 'ipconfig /flushdns'. " +
+                    "4) Temporarily disable VPN to see if it's the cause. " +
+                    "5) Check if antivirus is blocking or scanning network traffic."));
             }
         }
         else
@@ -53,7 +53,7 @@ public sealed class NetworkLatencyHealthAnalyzer : IHealthSubAnalyzer
         }
 
         double confidence = history.Count >= 3 ? 1.0 : history.Count / 3.0;
-        string? hint = current.DnsLatencyMs > 300 ? "Hög nätverkslatens (DNS)" : null;
+        string? hint = current.DnsLatencyMs > 300 ? "High network latency (DNS)" : null;
         return new HealthAssessment(new HealthScore(Domain, Math.Clamp(healthScore, 0, 100), confidence, hint), events);
     }
 

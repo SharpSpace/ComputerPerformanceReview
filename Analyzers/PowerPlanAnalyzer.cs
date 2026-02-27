@@ -5,7 +5,7 @@ namespace ComputerPerformanceReview.Analyzers;
 /// </summary>
 public sealed class PowerPlanAnalyzer : IAnalyzer
 {
-    public string Name => "Energischema";
+    public string Name => "Power Plan";
 
     public Task<AnalysisReport> AnalyzeAsync()
     {
@@ -13,91 +13,91 @@ public sealed class PowerPlanAnalyzer : IAnalyzer
 
         string? activePowerPlan = GetActivePowerPlan();
         bool isLaptop = IsLaptop();
-        string deviceType = isLaptop ? "Bärbar dator" : "Stationär dator";
+        string deviceType = isLaptop ? "Laptop" : "Desktop";
 
         if (string.IsNullOrEmpty(activePowerPlan))
         {
             results.Add(new AnalysisResult(
-                "Energi",
-                "Energischema",
-                "Kunde inte läsa aktivt energischema",
+                "Power",
+                "Power Plan",
+                "Could not read active power plan",
                 Severity.Warning,
-                "Kör programmet som administratör för fullständig analys"));
-            
-            return Task.FromResult(new AnalysisReport("ENERGISCHEMA", results));
+                "Run the program as administrator for full analysis"));
+
+            return Task.FromResult(new AnalysisReport("POWER PLAN", results));
         }
 
         var powerPlanLower = activePowerPlan.ToLowerInvariant();
-        
+
         // Check for power saver mode
-        bool isPowerSaver = powerPlanLower.Contains("power saver") || 
+        bool isPowerSaver = powerPlanLower.Contains("power saver") ||
                            powerPlanLower.Contains("energispar") ||
                            powerPlanLower.Contains("batterispar");
-        
+
         bool isHighPerformance = powerPlanLower.Contains("high performance") ||
                                 powerPlanLower.Contains("hög prestanda") ||
                                 powerPlanLower.Contains("ultimate");
-        
+
         bool isBalanced = powerPlanLower.Contains("balanced") ||
                          powerPlanLower.Contains("balanserad");
 
         results.Add(new AnalysisResult(
-            "Energi",
-            "Enhetstyp",
+            "Power",
+            "Device type",
             deviceType,
             Severity.Ok));
 
         if (isPowerSaver && !isLaptop)
         {
             results.Add(new AnalysisResult(
-                "Energi",
-                "Aktivt energischema",
-                $"'{activePowerPlan}' — INTE REKOMMENDERAT för stationär dator",
+                "Power",
+                "Active power plan",
+                $"'{activePowerPlan}' — NOT RECOMMENDED for desktop",
                 Severity.Critical,
-                "Energisparläge på stationär dator begränsar CPU-prestanda onödigt. " +
-                "Byt till 'Balanserad' eller 'Hög prestanda' för bättre respons.",
+                "Power Saver mode on a desktop unnecessarily limits CPU performance. " +
+                "Switch to 'Balanced' or 'High Performance' for better responsiveness.",
                 new List<ActionStep>
                 {
-                    new("Sök efter 'Energischema' i Start-menyn", null, "Lätt"),
-                    new("Välj 'Balanserad' eller 'Hög prestanda'", null, "Lätt"),
-                    new("Alternativ: Kör 'powercfg.exe /setactive SCHEME_BALANCED' som admin", 
-                        "powercfg.exe /setactive SCHEME_BALANCED", "Medel")
+                    new("Search for 'Power Plan' in the Start menu", null, "Easy"),
+                    new("Select 'Balanced' or 'High Performance'", null, "Easy"),
+                    new("Alternative: Run 'powercfg.exe /setactive SCHEME_BALANCED' as admin",
+                        "powercfg.exe /setactive SCHEME_BALANCED", "Medium")
                 }));
         }
         else if (isPowerSaver && isLaptop)
         {
             results.Add(new AnalysisResult(
-                "Energi",
-                "Aktivt energischema",
-                $"'{activePowerPlan}' — Energispar kan ge lägre prestanda",
+                "Power",
+                "Active power plan",
+                $"'{activePowerPlan}' — Power Saver may reduce performance",
                 Severity.Warning,
-                "Energisparläge kan begränsa prestanda även på nätström. " +
-                "Överväg 'Balanserad' för bättre prestanda när laddaren är inkopplad."));
+                "Power Saver mode can limit performance even on AC power. " +
+                "Consider 'Balanced' for better performance when the charger is connected."));
         }
         else if (isHighPerformance)
         {
             results.Add(new AnalysisResult(
-                "Energi",
-                "Aktivt energischema",
-                $"'{activePowerPlan}' — Maximala prestanda",
+                "Power",
+                "Active power plan",
+                $"'{activePowerPlan}' — Maximum performance",
                 Severity.Ok,
-                isLaptop 
-                    ? "Hög prestanda ger maximal respons men dränerar batteriet snabbare."
+                isLaptop
+                    ? "High Performance gives maximum responsiveness but drains the battery faster."
                     : null));
         }
         else if (isBalanced)
         {
             results.Add(new AnalysisResult(
-                "Energi",
-                "Aktivt energischema",
-                $"'{activePowerPlan}' — Rekommenderad inställning",
+                "Power",
+                "Active power plan",
+                $"'{activePowerPlan}' — Recommended setting",
                 Severity.Ok));
         }
         else
         {
             results.Add(new AnalysisResult(
-                "Energi",
-                "Aktivt energischema",
+                "Power",
+                "Active power plan",
                 $"'{activePowerPlan}'",
                 Severity.Ok));
         }
@@ -106,14 +106,14 @@ public sealed class PowerPlanAnalyzer : IAnalyzer
         if (!isHighPerformance && !isLaptop)
         {
             results.Add(new AnalysisResult(
-                "Energi",
-                "Prestandatips",
-                "För maximal prestanda på stationär dator, överväg 'Hög prestanda'",
+                "Power",
+                "Performance tip",
+                "For maximum performance on a desktop, consider 'High Performance'",
                 Severity.Ok,
-                "Detta förhindrar CPU-throttling och kan ge bättre respons i krävande applikationer."));
+                "This prevents CPU throttling and can give better responsiveness in demanding applications."));
         }
 
-        return Task.FromResult(new AnalysisReport("ENERGISCHEMA", results));
+        return Task.FromResult(new AnalysisReport("POWER PLAN", results));
     }
 
     private static string? GetActivePowerPlan()

@@ -41,6 +41,7 @@ public sealed class MonitorSampleBuilder
     public long GpuDedicatedLimitBytes { get; set; }
     public double DnsLatencyMs { get; set; }
     public int StorageErrorsLast15Min { get; set; }
+    public List<StorageErrorDetail>? StorageErrorDetails { get; set; }
     public int TdrEventsLast15Min { get; set; }
 
     public int MemoryPressureIndex { get; set; }
@@ -94,6 +95,7 @@ public sealed class MonitorSampleBuilder
         GpuDedicatedLimitBytes: GpuDedicatedLimitBytes,
         DnsLatencyMs: DnsLatencyMs,
         StorageErrorsLast15Min: StorageErrorsLast15Min,
+        StorageErrorDetails: StorageErrorDetails,
         TdrEventsLast15Min: TdrEventsLast15Min,
         MemoryPressureIndex: MemoryPressureIndex,
         SystemLatencyScore: SystemLatencyScore,

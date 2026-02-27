@@ -2,7 +2,7 @@ namespace ComputerPerformanceReview.Analyzers;
 
 public sealed class DriverAnalyzer : IAnalyzer
 {
-    public string Name => "Drivrutinanalys";
+    public string Name => "Driver Analysis";
 
     public Task<AnalysisReport> AnalyzeAsync()
     {
@@ -14,7 +14,7 @@ public sealed class DriverAnalyzer : IAnalyzer
         CheckUnsignedDrivers(results);
         CreateDriverSummary(results);
 
-        return Task.FromResult(new AnalysisReport("DRIVRUTINANALYS", results));
+        return Task.FromResult(new AnalysisReport("DRIVER ANALYSIS", results));
     }
 
     private static void CheckDevicesWithProblems(List<AnalysisResult> results)
@@ -26,20 +26,20 @@ public sealed class DriverAnalyzer : IAnalyzer
 
             if (devices.Count == 0)
             {
-                results.Add(new AnalysisResult("Drivrutiner", "Enheter med problem",
-                    "Inga enheter med problem hittades", Severity.Ok));
+                results.Add(new AnalysisResult("Drivers", "Devices with problems",
+                    "No devices with problems found", Severity.Ok));
                 return;
             }
 
             foreach (var device in devices)
             {
-                var name = WmiHelper.GetValue<string>(device, "Name") ?? "Okänd enhet";
+                var name = WmiHelper.GetValue<string>(device, "Name") ?? "Unknown device";
                 var errorCode = WmiHelper.GetValue<uint>(device, "ConfigManagerErrorCode");
 
-                results.Add(new AnalysisResult("Drivrutiner", "Enhet med problem",
-                    $"{name} (Felkod: {errorCode})",
+                results.Add(new AnalysisResult("Drivers", "Device with problem",
+                    $"{name} (Error code: {errorCode})",
                     Severity.Critical,
-                    "Uppdatera eller installera om drivrutinen för denna enhet"));
+                    "Update or reinstall the driver for this device"));
             }
         }
         catch { }
@@ -54,8 +54,8 @@ public sealed class DriverAnalyzer : IAnalyzer
 
             if (drivers.Count == 0)
             {
-                results.Add(new AnalysisResult("Drivrutiner", "Installerade drivrutiner",
-                    "Kunde inte läsa drivrutinsinformation", Severity.Warning));
+                results.Add(new AnalysisResult("Drivers", "Installed drivers",
+                    "Could not read driver information", Severity.Warning));
                 return;
             }
 
@@ -64,9 +64,9 @@ public sealed class DriverAnalyzer : IAnalyzer
 
             foreach (var driver in drivers)
             {
-                var deviceName = WmiHelper.GetValue<string>(driver, "DeviceName") ?? 
-                                 WmiHelper.GetValue<string>(driver, "DriverName") ?? "Okänd";
-                var version = WmiHelper.GetValue<string>(driver, "DriverVersion") ?? "Okänd";
+                var deviceName = WmiHelper.GetValue<string>(driver, "DeviceName") ??
+                                 WmiHelper.GetValue<string>(driver, "DriverName") ?? "Unknown";
+                var version = WmiHelper.GetValue<string>(driver, "DriverVersion") ?? "Unknown";
                 var dateStr = WmiHelper.GetValue<string>(driver, "DriverDate");
 
                 DateTime? date = null;
@@ -95,10 +95,10 @@ public sealed class DriverAnalyzer : IAnalyzer
                     .Select(d => $"{d.Name} ({d.Date:yyyy-MM-dd})"));
 
                 if (oldestDrivers.Count > 3)
-                    driverNames += $" och {oldestDrivers.Count - 3} till";
+                    driverNames += $" and {oldestDrivers.Count - 3} more";
 
-                results.Add(new AnalysisResult("Drivrutiner", "Äldsta drivrutiner",
-                    $"Äldsta drivrutiner: {driverNames}",
+                results.Add(new AnalysisResult("Drivers", "Oldest drivers",
+                    $"Oldest drivers: {driverNames}",
                     Severity.Ok));
             }
         }
@@ -132,9 +132,9 @@ public sealed class DriverAnalyzer : IAnalyzer
 
                     if (years > 2)
                     {
-                        var deviceName = WmiHelper.GetValue<string>(driver, "DeviceName") ?? 
-                                         WmiHelper.GetValue<string>(driver, "DriverName") ?? "Okänd";
-                        var version = WmiHelper.GetValue<string>(driver, "DriverVersion") ?? "Okänd";
+                        var deviceName = WmiHelper.GetValue<string>(driver, "DeviceName") ??
+                                         WmiHelper.GetValue<string>(driver, "DriverName") ?? "Unknown";
+                        var version = WmiHelper.GetValue<string>(driver, "DriverVersion") ?? "Unknown";
                         oldDrivers.Add((deviceName, version, driverDate, years));
                     }
                 }
@@ -147,24 +147,24 @@ public sealed class DriverAnalyzer : IAnalyzer
 
             foreach (var driver in criticalDrivers.Take(5))
             {
-                results.Add(new AnalysisResult("Drivrutiner", "Föråldrad drivrutin",
-                    $"{driver.Name} (v{driver.Version}, {driver.Date:yyyy-MM-dd}, {driver.Years:F0} år gammal)",
+                results.Add(new AnalysisResult("Drivers", "Outdated driver",
+                    $"{driver.Name} (v{driver.Version}, {driver.Date:yyyy-MM-dd}, {driver.Years:F0} years old)",
                     Severity.Critical,
-                    "Mycket gammal drivrutin - uppdatera för bättre prestanda och säkerhet"));
+                    "Very old driver - update for better performance and security"));
             }
 
             foreach (var driver in warningDrivers.Take(5))
             {
-                results.Add(new AnalysisResult("Drivrutiner", "Föråldrad drivrutin",
-                    $"{driver.Name} (v{driver.Version}, {driver.Date:yyyy-MM-dd}, {driver.Years:F0} år gammal)",
+                results.Add(new AnalysisResult("Drivers", "Outdated driver",
+                    $"{driver.Name} (v{driver.Version}, {driver.Date:yyyy-MM-dd}, {driver.Years:F0} years old)",
                     Severity.Warning,
-                    "Gammal drivrutin - överväg att uppdatera"));
+                    "Old driver - consider updating"));
             }
 
             if (oldDrivers.Count == 0)
             {
-                results.Add(new AnalysisResult("Drivrutiner", "Drivrutinsålder",
-                    "Alla drivrutiner är relativt uppdaterade (mindre än 2 år gamla)",
+                results.Add(new AnalysisResult("Drivers", "Driver age",
+                    "All drivers are relatively up to date (less than 2 years old)",
                     Severity.Ok));
             }
         }
@@ -180,20 +180,20 @@ public sealed class DriverAnalyzer : IAnalyzer
 
             if (drivers.Count == 0)
             {
-                results.Add(new AnalysisResult("Drivrutiner", "Osignerade drivrutiner",
-                    "Inga osignerade drivrutiner hittades", Severity.Ok));
+                results.Add(new AnalysisResult("Drivers", "Unsigned drivers",
+                    "No unsigned drivers found", Severity.Ok));
                 return;
             }
 
             foreach (var driver in drivers.Take(10))
             {
-                var name = WmiHelper.GetValue<string>(driver, "DeviceName") ?? 
-                           WmiHelper.GetValue<string>(driver, "DriverName") ?? "Okänd";
+                var name = WmiHelper.GetValue<string>(driver, "DeviceName") ??
+                           WmiHelper.GetValue<string>(driver, "DriverName") ?? "Unknown";
 
-                results.Add(new AnalysisResult("Drivrutiner", "Osignerad drivrutin",
+                results.Add(new AnalysisResult("Drivers", "Unsigned driver",
                     $"{name}",
                     Severity.Warning,
-                    "Osignerade drivrutiner kan vara en säkerhetsrisk"));
+                    "Unsigned drivers can be a security risk"));
             }
         }
         catch { }
@@ -208,8 +208,8 @@ public sealed class DriverAnalyzer : IAnalyzer
 
             if (drivers.Count == 0)
             {
-                results.Add(new AnalysisResult("Drivrutiner", "Sammanfattning",
-                    "Kunde inte läsa drivrutinsinformation", Severity.Warning));
+                results.Add(new AnalysisResult("Drivers", "Summary",
+                    "Could not read driver information", Severity.Warning));
                 return;
             }
 
@@ -223,8 +223,8 @@ public sealed class DriverAnalyzer : IAnalyzer
 
             var severity = problemDrivers > 0 || unsignedDrivers > 0 ? Severity.Warning : Severity.Ok;
 
-            results.Add(new AnalysisResult("Drivrutiner", "Drivrutinsstatus",
-                $"{totalDrivers} drivrutiner installerade ({problemDrivers} med problem, {unsignedDrivers} osignerade)",
+            results.Add(new AnalysisResult("Drivers", "Driver status",
+                $"{totalDrivers} drivers installed ({problemDrivers} with problems, {unsignedDrivers} unsigned)",
                 severity));
         }
         catch { }
