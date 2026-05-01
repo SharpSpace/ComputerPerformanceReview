@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
 using System.Windows.Media;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -64,6 +65,9 @@ public partial class MonitorViewModel : ObservableObject
     // ── Hanging ──
     [ObservableProperty] private string _hangingStatus = "None";
     [ObservableProperty] private bool _hasHanging;
+    [ObservableProperty] private string _hangingOriginUser = "";
+    [ObservableProperty] private string _hangingOriginParent = "";
+    [ObservableProperty] private bool _hasHangingOrigin;
 
     // ── Timer ──
     [ObservableProperty] private string _elapsed = "0:00";
@@ -242,11 +246,26 @@ public partial class MonitorViewModel : ObservableObject
             HasHanging = true;
             var h = sample.HangingProcesses[0];
             HangingStatus = $"{h.Name} ({h.HangSeconds:F0}s)";
+
+            var origin = sample.FreezeInfo?.Origin;
+            if (origin is not null)
+            {
+                HangingOriginUser = origin.AccountDisplay;
+                HangingOriginParent = origin.ParentName is not null
+                    ? $"{origin.ParentName} (PID {origin.ParentPid})"
+                    : $"PID {origin.ParentPid} (exited)";
+                HasHangingOrigin = true;
+            }
+            else
+            {
+                HasHangingOrigin = false;
+            }
         }
         else
         {
             HasHanging = false;
             HangingStatus = "None";
+            HasHangingOrigin = false;
         }
 
         // Chart history (cap at 60 points = 3 min)
@@ -255,6 +274,8 @@ public partial class MonitorViewModel : ObservableObject
         AddToHistory(DiskQHistory, sample.DiskQueueLength, 60);
         AddToHistory(NetHistory, sample.NetworkMbps, 60);
     }
+
+    private readonly HashSet<string> _pinnedEventTypes = [];
 
     private void UpdateEvents(List<MonitorEvent> allEvents)
     {
@@ -265,11 +286,19 @@ public partial class MonitorViewModel : ObservableObject
         {
             if (seen.Add(evt.EventType))
             {
-                unique.Add(new EventDisplayItem(
+                var item = new EventDisplayItem(
+                    evt.EventType,
                     evt.Timestamp.ToString("HH:mm:ss"),
                     evt.Severity,
                     evt.Description,
-                    evt.Tip));
+                    evt.Tip,
+                    (type, pinned) =>
+                    {
+                        if (pinned) _pinnedEventTypes.Add(type);
+                        else _pinnedEventTypes.Remove(type);
+                    });
+                item.IsPinned = _pinnedEventTypes.Contains(evt.EventType);
+                unique.Add(item);
             }
             if (unique.Count >= 10) break;
         }
@@ -330,4 +359,48 @@ public partial class MonitorViewModel : ObservableObject
 }
 
 public record ProcessDisplayItem(string Name, string Value, string Category);
-public record EventDisplayItem(string Time, string Severity, string Description, string Tip);
+
+public class EventDisplayItem : ObservableObject
+{
+    private static readonly Regex TipSplitRegex = new(@"\s+(?=\d+\)\s)", RegexOptions.Compiled);
+
+    private readonly Action<string, bool>? _onPinChanged;
+
+    public string EventType { get; }
+    public string Time { get; }
+    public string Severity { get; }
+    public string Description { get; }
+    public string Tip { get; }
+    public IReadOnlyList<string> TipLines { get; }
+    public bool HasTip => !string.IsNullOrWhiteSpace(Tip);
+
+    private bool _isPinned;
+    public bool IsPinned
+    {
+        get => _isPinned;
+        set
+        {
+            if (SetProperty(ref _isPinned, value))
+                _onPinChanged?.Invoke(EventType, value);
+        }
+    }
+
+    public EventDisplayItem(string eventType, string time, string severity, string description, string tip,
+        Action<string, bool>? onPinChanged = null)
+    {
+        EventType = eventType;
+        Time = time;
+        Severity = severity;
+        Description = description;
+        Tip = tip;
+        TipLines = FormatTipLines(tip);
+        _onPinChanged = onPinChanged;
+    }
+
+    private static IReadOnlyList<string> FormatTipLines(string tip)
+    {
+        if (string.IsNullOrWhiteSpace(tip)) return [];
+        var parts = TipSplitRegex.Split(tip.Trim());
+        return parts.Select(p => p.Trim()).Where(p => p.Length > 0).ToArray();
+    }
+}

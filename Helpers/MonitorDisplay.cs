@@ -303,6 +303,21 @@ public static class MonitorDisplay
             // Freeze classification
             if (sample.FreezeInfo is not null)
             {
+                if (sample.FreezeInfo.Origin is { } hangOrigin)
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.Write("            → User: ");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.Write(hangOrigin.AccountDisplay);
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.Write("  Started by: ");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    string parentLabel = hangOrigin.ParentName is not null
+                        ? $"{hangOrigin.ParentName} (PID {hangOrigin.ParentPid})"
+                        : $"PID {hangOrigin.ParentPid} (already exited)";
+                    Console.WriteLine(parentLabel);
+                }
+
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.Write("            → Likely cause: ");
                 Console.ForegroundColor = ConsoleColor.Yellow;
@@ -338,6 +353,24 @@ public static class MonitorDisplay
                 Console.Write("              Process: ");
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine($"{report.ProcessName} (PID {report.ProcessId})");
+
+                if (report.Origin is { } origin)
+                {
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    Console.Write("              User: ");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.WriteLine(origin.AccountDisplay);
+
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    Console.Write("              Started by: ");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    string parentLabel = origin.ParentName is not null
+                        ? $"{origin.ParentName} (PID {origin.ParentPid})"
+                        : $"PID {origin.ParentPid} (already exited)";
+                    Console.Write(parentLabel);
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.WriteLine($"  [{origin.Algorithm}]");
+                }
                 
                 Console.ForegroundColor = ConsoleColor.Gray;
                 Console.Write("              Freeze duration: ");

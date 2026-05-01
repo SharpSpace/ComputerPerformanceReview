@@ -40,7 +40,7 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
         var topGdi = new List<MonitorProcessInfo>();
         var topIo = new List<MonitorIoProcessInfo>();
         var topFaults = new List<MonitorFaultProcessInfo>();
-        var hangingNames = new List<string>();
+        var hangingProcs = new List<(string Name, int Pid)>();
         long totalSystemHandles = 0;
         int cpuCount = Environment.ProcessorCount;
 
@@ -55,7 +55,7 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
                 try
                 {
                     if (proc.MainWindowHandle != IntPtr.Zero && !proc.Responding)
-                        hangingNames.Add(proc.ProcessName);
+                        hangingProcs.Add((proc.ProcessName, proc.Id));
                 }
                 catch { }
 
@@ -152,13 +152,17 @@ public sealed class ProcessHealthAnalyzer : IHealthSubAnalyzer
             _prevPageFaults[kvp.Key] = kvp.Value;
 
         // Build hanging process info with duration from tracker
-        var hangingProcesses = hangingNames.Distinct().Select(name =>
-        {
-            double hangSec = 0;
-            if (_hangingTracker.TryGetValue(name, out var startTime))
-                hangSec = (DateTime.Now - startTime).TotalSeconds;
-            return new HangingProcessInfo(name, hangSec);
-        }).ToList();
+        var hangingProcesses = hangingProcs
+            .GroupBy(p => p.Name)
+            .Select(g =>
+            {
+                var name = g.Key;
+                var pid = g.First().Pid;
+                double hangSec = 0;
+                if (_hangingTracker.TryGetValue(name, out var startTime))
+                    hangSec = (DateTime.Now - startTime).TotalSeconds;
+                return new HangingProcessInfo(name, hangSec, pid);
+            }).ToList();
 
         builder.TotalSystemHandles = totalSystemHandles;
         builder.TopCpuProcesses = topCpu.OrderByDescending(p => p.CpuPercent).Take(5).ToList();

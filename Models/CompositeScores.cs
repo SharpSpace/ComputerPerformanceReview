@@ -7,5 +7,6 @@ public sealed record FreezeClassification(
     string ProcessName,
     string LikelyCause,
     string Description,
-    List<string>? Evidence = null
+    List<string>? Evidence = null,
+    ProcessOriginInfo? Origin = null
 );

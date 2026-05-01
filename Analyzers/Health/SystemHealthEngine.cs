@@ -116,7 +116,12 @@ public sealed class SystemHealthEngine
         if (sampleWithScores.HangingProcesses.Count > 0)
         {
             var firstHang = sampleWithScores.HangingProcesses[0];
+            var hangOrigin = firstHang.Pid > 0
+                ? ProcessOriginHelper.GetOrigin(firstHang.Pid)
+                : null;
             freezeInfo = FreezeDetector.Classify(firstHang.Name, sampleWithScores);
+            if (freezeInfo is not null && hangOrigin is not null)
+                freezeInfo = freezeInfo with { Origin = hangOrigin };
             builder.FreezeInfo = freezeInfo;
             
             // Deep freeze investigation for freezes > 5 seconds

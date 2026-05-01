@@ -110,6 +110,8 @@ public static class FreezeInvestigator
                 process,
                 dumpAnalysis);
 
+            var origin = ProcessOriginHelper.GetOrigin(processId);
+
             return new FreezeReport(
                 ProcessName: processName,
                 ProcessId: processId,
@@ -120,7 +122,8 @@ public static class FreezeInvestigator
                 DominantWaitReason: dominantWaitReason,
                 LikelyRootCause: diagnostic.Description,
                 MiniDumpPath: dumpPath,
-                MiniDumpAnalysis: dumpAnalysis
+                MiniDumpAnalysis: dumpAnalysis,
+                Origin: origin
             );
         }
         catch

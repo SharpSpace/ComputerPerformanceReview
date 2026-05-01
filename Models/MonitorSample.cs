@@ -56,7 +56,7 @@ public sealed record MonitorSample(
     MiniDumpAnalysis? SysinternalsProcDumpAnalysis = null
 );
 
-public sealed record HangingProcessInfo(string Name, double HangSeconds);
+public sealed record HangingProcessInfo(string Name, double HangSeconds, int Pid = 0);
 
 public sealed record MonitorProcessInfo(
     string Name,

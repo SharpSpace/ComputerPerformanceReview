@@ -66,6 +66,8 @@ public partial class SnapshotViewModel : ObservableObject
             new DiskAnalyzer(),
             new NetworkAnalyzer(),
             new PowerPlanAnalyzer(),
+            new BiosSettingsAnalyzer(),
+            new HardwareUpgradeAnalyzer(),
         ];
 
         int done = 0;

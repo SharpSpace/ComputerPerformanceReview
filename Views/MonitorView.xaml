@@ -8,6 +8,7 @@
         <conv:BytesToStringConverter x:Key="Bytes"/>
         <conv:NumberToCompactConverter x:Key="Compact"/>
         <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
+        <conv:StringNotEmptyToVisibilityConverter x:Key="StrVis"/>
     </UserControl.Resources>
 
     <Grid Background="{DynamicResource WindowBrush}">
@@ -386,11 +387,55 @@
                                                 <TextBlock Text="{Binding Severity}" Foreground="White" FontSize="10" FontWeight="SemiBold"/>
                                             </Border>
                                             <StackPanel Grid.Column="2" Margin="6,0,0,0">
-                                                <TextBlock Text="{Binding Description}" Style="{StaticResource StatLabel}"
-                                                           Foreground="{DynamicResource ForegroundBrush}" TextWrapping="Wrap"/>
-                                                <TextBlock Text="{Binding Tip}" Style="{StaticResource StatLabel}"
-                                                           FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
-                                                           Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                                <!-- Description row with toggle button -->
+                                                <DockPanel LastChildFill="True">
+                                                    <ToggleButton DockPanel.Dock="Right"
+                                                                  IsChecked="{Binding IsPinned, Mode=TwoWay}"
+                                                                  Visibility="{Binding HasTip, Converter={StaticResource BoolVis}}"
+                                                                  Width="16" Height="16"
+                                                                  VerticalAlignment="Top" Margin="6,1,0,0"
+                                                                  Cursor="Hand" ToolTip="Click to pin / unpin tips">
+                                                        <ToggleButton.Style>
+                                                            <Style TargetType="ToggleButton">
+                                                                <Setter Property="Template">
+                                                                    <Setter.Value>
+                                                                        <ControlTemplate TargetType="ToggleButton">
+                                                                            <Border x:Name="Bd" Width="16" Height="16" CornerRadius="8"
+                                                                                    Background="{DynamicResource AccentBrush}">
+                                                                                <TextBlock Text="i" FontSize="10" FontWeight="Bold" FontStyle="Italic"
+                                                                                           Foreground="White"
+                                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                            </Border>
+                                                                            <ControlTemplate.Triggers>
+                                                                                <Trigger Property="IsChecked" Value="True">
+                                                                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource WarningBrush}"/>
+                                                                                </Trigger>
+                                                                            </ControlTemplate.Triggers>
+                                                                        </ControlTemplate>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </Style>
+                                                        </ToggleButton.Style>
+                                                    </ToggleButton>
+                                                    <TextBlock Text="{Binding Description}" Style="{StaticResource StatLabel}"
+                                                               Foreground="{DynamicResource ForegroundBrush}" TextWrapping="Wrap"/>
+                                                </DockPanel>
+                                                <!-- Pinned tip panel — one line per tip step -->
+                                                <Border Visibility="{Binding IsPinned, Converter={StaticResource BoolVis}}"
+                                                        Background="{DynamicResource SurfaceBrush}"
+                                                        BorderBrush="{DynamicResource WarningBrush}"
+                                                        BorderThickness="2,0,0,0"
+                                                        Margin="0,4,0,0" Padding="8,4">
+                                                    <ItemsControl ItemsSource="{Binding TipLines}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Text="{Binding}" FontSize="11" TextWrapping="Wrap"
+                                                                           Foreground="{DynamicResource ForegroundBrush}"
+                                                                           Margin="0,1"/>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </Border>
                                             </StackPanel>
                                         </Grid>
                                     </Border>
@@ -405,10 +450,19 @@
 
                 <!-- Hanging -->
                 <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource CardStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="HANGING:" Style="{StaticResource SectionHeader}" VerticalAlignment="Center"/>
-                        <TextBlock Text="{Binding HangingStatus}" Style="{StaticResource StatValue}"
-                                   Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="HANGING:" Style="{StaticResource SectionHeader}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding HangingStatus}" Style="{StaticResource StatValue}"
+                                       Foreground="{DynamicResource ForegroundBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                    Visibility="{Binding HasHangingOrigin, Converter={StaticResource BoolVis}}">
+                            <TextBlock Text="User:" Foreground="{DynamicResource SubtleForegroundBrush}" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding HangingOriginUser}" Foreground="{DynamicResource ForegroundBrush}" FontSize="11" Margin="4,0,12,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Started by:" Foreground="{DynamicResource SubtleForegroundBrush}" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding HangingOriginParent}" Foreground="{DynamicResource ForegroundBrush}" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>

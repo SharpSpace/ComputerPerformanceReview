@@ -24,7 +24,8 @@ public sealed record FreezeReport(
     string? DominantWaitReason,
     string LikelyRootCause,
     string? MiniDumpPath = null,
-    MiniDumpAnalysis? MiniDumpAnalysis = null
+    MiniDumpAnalysis? MiniDumpAnalysis = null,
+    ProcessOriginInfo? Origin = null
 );
 
 /// <summary>
